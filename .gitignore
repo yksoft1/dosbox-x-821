@@ -326,6 +326,6 @@ Makefile
 aclocal.m4
 configure
 
-vs2015/sdl/linux-host
-vs2015/sdl/linux-host/*
+!vs2015/
+
 
