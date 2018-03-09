@@ -1,0 +1,4 @@
+files=8
+buffers=10
+shell=a:\command.com /p
+
