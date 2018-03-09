@@ -244,7 +244,11 @@ CDirect3D*					d3d = NULL;
 #ifdef WIN32
 # define STDOUT_FILE				TEXT("stdout.txt")
 # define STDERR_FILE				TEXT("stderr.txt")
+#ifndef HX_DOS
 # define DEFAULT_CONFIG_FILE			"/dosbox.conf"
+#else
+# define DEFAULT_CONFIG_FILE			"/dosbox.ini"
+#endif
 #elif defined(MACOSX)
 # define DEFAULT_CONFIG_FILE			"/Library/Preferences/DOSBox Preferences"
 #else /*linux freebsd*/
@@ -1639,6 +1643,7 @@ static LRESULT CALLBACK WinExtHookKeyboardHookProc(int nCode,WPARAM wParam,LPARA
 // Microsoft doesn't have an outright "set toggle key state" call, they expect you
 // to know the state and then fake input to toggle. Blegh. Fine.
 void WinSetKeyToggleState(unsigned int vkCode, bool state) {
+#ifndef HX_DOS
 	bool curState = (GetKeyState(vkCode) & 1) ? true : false;
 	INPUT inps;
 
@@ -1657,6 +1662,7 @@ void WinSetKeyToggleState(unsigned int vkCode, bool state) {
 	inps.ki.wVk = vkCode;
 	inps.ki.dwFlags = KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP; // release, use wVk.
 	SendInput(1, &inps, sizeof(INPUT));
+#endif
 }
 #endif
 
@@ -2018,6 +2024,7 @@ void change_output(int output) {
 		break;
 	case 2: /* do nothing */
 		break;
+#if C_OPENGL
 	case 3:
 		change_output(2);
 		sdl.desktop.want_type=SCREEN_OPENGL;
@@ -2032,12 +2039,14 @@ void change_output(int output) {
 		sdl.opengl.bilinear = false; //NB
 #endif
 		break;
+#endif
 #if defined(__WIN32__) && !defined(C_SDL2)
 	case 5:
 		sdl.desktop.want_type=SCREEN_DIRECT3D;
 		d3d_init();
 		break;
 #endif
+#if C_OPENGL
 	case 6: {
 #if defined(__WIN32__) && !defined(C_SDL2)
 		if (MessageBox(GetHWND(),"GUI will be disabled if output is set to OpenglHQ. Do you want to continue?","Warning",MB_YESNO)==IDNO) {
@@ -2047,6 +2056,7 @@ void change_output(int output) {
 		openglhq_init();
 		}
 		break;
+#endif
 	case 7:
 		// do not set want_type
 		break;
@@ -3458,10 +3468,12 @@ void* GetSetSDLValue(int isget, std::string target, void* setval) {
 	if (target == "wait_on_error") {
 		if (isget) return (void*) sdl.wait_on_error;
 		else sdl.wait_on_error = setval;
+#if C_OPENGL
 	}
 	else if (target == "opengl.bilinear") {
 		if (isget) return (void*) sdl.opengl.bilinear;
 		else sdl.opengl.bilinear = setval;
+#endif
 /*
 	} else if (target == "draw.callback") {
 		if (isget) return (void*) sdl.draw.callback;
@@ -4494,7 +4506,11 @@ static void printconfiglocation() {
 }
 
 static void eraseconfigfile() {
+#ifndef HX_DOS
 	FILE* f = fopen("dosbox.conf","r");
+#else
+	FILE* f = fopen("dosbox.ini","r");
+#endif
 	if(f) {
 		fclose(f);
 		show_warning("Warning: dosbox.conf exists in current working directory.\nThis will override the configuration file at runtime.\n");
@@ -4558,7 +4574,7 @@ void CheckNumLockState(void) {
 extern bool log_keyboard_scan_codes;
 
 void DOSBox_ShowConsole() {
-#if defined(WIN32)
+#if defined(WIN32) && !defined(HX_DOS)
 	CONSOLE_SCREEN_BUFFER_INFO csbi;
 	COORD crd;
 	HWND hwnd;
@@ -4994,7 +5010,7 @@ int main(int argc, char* argv[]) {
     Config myconf(&com_line);
 
     control=&myconf;
-#if defined(WIN32)
+#if defined(WIN32) && !defined(HX_DOS)
     /* Microsoft's IME does not play nice with DOSBox */
     ImmDisableIME((DWORD)(-1));
 #endif
@@ -5066,7 +5082,11 @@ int main(int argc, char* argv[]) {
 		}
 
 		/* -- -- if none found, use dosbox.conf */
+#ifndef HX_DOS
 		if (!control->configfiles.size()) control->ParseConfigFile("dosbox.conf");
+#else
+		if (!control->configfiles.size()) control->ParseConfigFile("dosbox.ini");
+#endif
 
 		/* -- -- if none found, use userlevel conf */
 		if (!control->configfiles.size()) {
@@ -5089,7 +5109,7 @@ int main(int argc, char* argv[]) {
 
 		/* -- [debug] setup console */
 #if C_DEBUG
-# if defined(WIN32)
+# if defined(WIN32) && !defined(HX_DOS)
 		/* Can't disable the console with debugger enabled */
 		if (control->opt_noconsole) {
 			LOG(LOG_MISC,LOG_DEBUG)("-noconsole: hiding Win32 console window");

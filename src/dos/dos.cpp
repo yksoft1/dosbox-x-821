@@ -33,7 +33,9 @@
 #include "support.h"
 #include "parport.h"
 #include "serialport.h"
+#ifndef HX_DOS
 #include "dos_network.h"
+#endif
 
 int ascii_toupper(int c) {
 	if (c >= 'a' && c <= 'z')
@@ -1434,7 +1436,8 @@ static Bitu DOS_21Handler(void) {
 		}
 		break;
 	case 0x5f:					/* Network redirection */
-#ifdef WIN32
+#if defined(WIN32)
+#ifndef HX_DOS
 		switch(reg_al)
 		{
 		case	0x34:	//Set pipe state
@@ -1476,6 +1479,10 @@ static Bitu DOS_21Handler(void) {
 			CALLBACK_SCF(true);
 			break;
 		}
+#else
+		reg_ax=0x0001;			//Failing it
+		CALLBACK_SCF(true);	
+#endif
 #else
 		reg_ax=0x0001;			//Failing it
 		CALLBACK_SCF(true);

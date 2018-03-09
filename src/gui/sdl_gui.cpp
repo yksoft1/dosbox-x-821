@@ -555,7 +555,11 @@ public:
 			fullpath += CROSS_FILESPLIT;
 			fullpath += file;
 		} else
+#ifndef HX_DOS
 			fullpath = "dosbox.conf";
+#else
+			fullpath = "dosbox.ini";
+#endif
 		name->setText(fullpath.c_str());
 		(new GUI::Button(this, 120, 70, "Cancel", 70))->addActionHandler(this);
 		(new GUI::Button(this, 210, 70, "OK", 70))->addActionHandler(this);

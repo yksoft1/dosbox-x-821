@@ -679,12 +679,14 @@ this->hidden->hiresFix, &x, &y);
 		}
 		return(0);
 
+#ifndef HX_DOS
 #ifndef NO_GETKEYBOARDSTATE
 		case WM_INPUTLANGCHANGE:
 #ifndef _WIN64
 			codepage = GetCodePage();
 #endif
 		return(TRUE);
+#endif
 #endif
 
 		default: {
