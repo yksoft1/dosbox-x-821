@@ -673,7 +673,7 @@ public:
 		 * SS:SP = 0030:00D8
 		 */
 		Bitu stack_seg=IS_PC98_ARCH ? 0x0030 : 0x7000;
-		Bitu load_seg=IS_PC98_ARCH ? 0x1FE0 : 0x07C0;
+		Bitu load_seg;//=IS_PC98_ARCH ? 0x1FE0 : 0x07C0;
 
 		if (MEM_TotalPages() > 0x9C)
 			max_seg = 0x9C00;
@@ -762,6 +762,9 @@ public:
         }
 
 		unsigned int bootsize = imageDiskList[drive-65]->getSectSize();
+
+		/* NTS: Load address is 128KB - sector size */
+		load_seg=IS_PC98_ARCH ? (0x2000 - (bootsize/16U)) : 0x07C0;
 
 		imageDiskList[drive-65]->Read_Sector(0,0,1,(Bit8u *)&bootarea);
 
@@ -1022,6 +1025,28 @@ public:
                     mem_writew(0xA0000+i,0x0000);
                     mem_writew(0xA2000+i,0x00E1);
                 }
+
+				/* There is a byte at 0x584 that describes the boot drive + type.
+				 * This is confirmed in Neko Project II source and by the behavior
+				 * of an MS-DOS boot disk formatted by a PC-98 system.
+				 *
+				 * There are three values for three different floppy formats, and
+				 * one for hard drives */
+				Bit32u heads,cyls,sects,ssize;
+
+				imageDiskList[drive-65]->Get_Geometry(&heads,&cyls,&sects,&ssize);
+
+				if (ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) {
+					mem_writeb(0x584,0x90/*type*/ + 0x00/*drive*/); /* 1.2MB 3-mode */
+				}
+				else if (ssize == 512 && heads == 2 && cyls == 80 && sects == 18) {
+					mem_writeb(0x584,0x30/*type*/ + 0x00/*drive*/); /* 1.44MB */
+				}
+				/* TODO: 640KB? */
+				else {
+					/* hard drive */
+					mem_writeb(0x584,0x00/*type*/ + 0x00/*drive*/);
+				}
             }
 			else {
 				SegSet16(cs, 0);
