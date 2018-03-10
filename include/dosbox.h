@@ -48,7 +48,7 @@ HWND GetSDLScreenHWND(void);
 # define HAS_LONG_DOUBLE		1
 #endif
 
-#define UPDATED_STR			"Mar 3, 2018"
+#define UPDATED_STR			"Mar 11, 2018"
 
 GCC_ATTRIBUTE(noreturn) void		E_Exit(const char * message,...) GCC_ATTRIBUTE( __format__(__printf__, 1, 2));
 
