@@ -749,7 +749,23 @@ void DOS_Shell::CMD_DIR(char * args) {
 	DOS_DTA dta(dos.dta());
 	bool ret=DOS_FindFirst(args,0xffff & ~DOS_ATTR_VOLUME);
 	if (!ret) {
-		if (!optB) WriteOut(MSG_Get("SHELL_CMD_FILE_NOT_FOUND"),args);
+		if (!optB) 
+		{ //Why not displaying free space when no file is found in root?? -- yksoft1
+			WriteOut(MSG_Get("SHELL_CMD_FILE_NOT_FOUND"),args);
+			/* Show the summary of results */
+			FormatNumber(byte_count,numformat);
+			WriteOut(MSG_Get("SHELL_CMD_DIR_BYTES_USED"),file_count,numformat);
+			Bit8u drive=dta.GetSearchDrive();
+			//TODO Free Space
+			Bitu free_space=1024*1024*100;
+			if (Drives[drive]) {
+				Bit16u bytes_sector;Bit8u sectors_cluster;Bit16u total_clusters;Bit16u free_clusters;
+				Drives[drive]->AllocationInfo(&bytes_sector,&sectors_cluster,&total_clusters,&free_clusters);
+				free_space=bytes_sector*sectors_cluster*free_clusters;
+			}
+			FormatNumber(free_space,numformat);
+			WriteOut(MSG_Get("SHELL_CMD_DIR_BYTES_FREE"),dir_count,numformat);
+		}
 		dos.dta(save_dta);
 		return;
 	}
