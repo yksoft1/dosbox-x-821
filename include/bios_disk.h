@@ -153,7 +153,7 @@ public:
 	imageDiskMemory(Bit32u imgSizeK);
 	imageDiskMemory(Bit32u cylinders, Bit32u heads, Bit32u sectors, Bit32u sectorSize);
 	imageDiskMemory(diskGeo floppyGeometry);
-	imageDiskMemory(imageDisk* underylingImage);
+	imageDiskMemory(imageDisk* underlyingImage);
 	virtual ~imageDiskMemory();
 
 private:
