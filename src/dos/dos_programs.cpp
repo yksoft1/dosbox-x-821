@@ -725,8 +725,17 @@ public:
 				WriteOut(MSG_Get("PROGRAM_BOOT_IMAGE_OPEN"), temp_line.c_str());
 				FILE *usefile = getFSFile(temp_line.c_str(), &floppysize, &rombytesize);
 				if(usefile != NULL) {
+					char tmp[256];
 					if(diskSwap[i] != NULL) diskSwap[i]->Release();
-					diskSwap[i] = new imageDisk(usefile, (Bit8u *)temp_line.c_str(), floppysize, false);
+					fseeko64(usefile, 0L, SEEK_SET);
+					fread(tmp,256,1,usefile); // look for magic signatures
+
+					if (!memcmp(tmp,"VFD1.",5)) { /* FDD files */
+						diskSwap[i] = new imageDiskVFD(usefile, (Bit8u *)temp_line.c_str(), floppysize, false);
+					}
+					else {
+						diskSwap[i] = new imageDisk(usefile, (Bit8u *)temp_line.c_str(), floppysize, false);
+					}
 					diskSwap[i]->Addref();
 
 					if (usefile_1==NULL) {
@@ -1036,19 +1045,34 @@ public:
 
 				imageDiskList[drive-65]->Get_Geometry(&heads,&cyls,&sects,&ssize);
 
+				Bitu disk_equip = 0,disk_equip_144 = 0;
+
+				 /* FIXME: MS-DOS appears to be able to see disk image B: but only
+				  * if the disk format is the same, for some reason.
+				  *
+				  * So, apparently you cannot put a 1.44MB image in drive A:
+				  * and a 1.2MB image in drive B: */
+
+				for (unsigned int i=0;i < 2;i++) {
+					if (imageDiskList[i] != NULL) {
+						disk_equip |= (1 << i);
+						disk_equip_144 |= (1 << i);
+					}
+				}				
+				
 				if (ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) {
-					mem_writeb(0x584,0x90/*type*/ + 0x00/*drive*/); /* 1.2MB 3-mode */
-					mem_writew(0x55C,0x0001); /* disk equipment (drive 0 is present) */
-					mem_writew(0x5AE,0x0001); /* disk equipment (drive 0 is present, 1.44MB) */
+					mem_writeb(0x584,0x90/*type*/ + (drive - 65)/*drive*/); /* 1.2MB 3-mode */
+					mem_writew(0x55C,disk_equip); /* disk equipment (drive 0 is present) */
+					mem_writew(0x5AE,disk_equip_144); /* disk equipment (drive 0 is present, 1.44MB) */
 				}
 				else if (ssize == 512 && heads == 2 && cyls == 80 && sects == 18) {
-					mem_writeb(0x584,0x30/*type*/ + 0x00/*drive*/); /* 1.44MB */
-					mem_writew(0x55C,0x0001); /* disk equipment (drive 0 is present and high density) */
-					mem_writew(0x5AE,0x0001); /* disk equipment (drive 0 is present, 1.44MB) */
+					mem_writeb(0x584,0x30/*type*/ + (drive - 65)/*drive*/); /* 1.44MB */
+					mem_writew(0x55C,disk_equip); /* disk equipment (drive 0 is present) */
+					mem_writew(0x5AE,disk_equip_144); /* disk equipment (drive 0 is present, 1.44MB) */
 				}
 				/* TODO: 640KB? */
 				else {
-					/* hard drive */
+					/* TODO: hard drive */
 					mem_writeb(0x584,0x00/*type*/ + 0x00/*drive*/);
 				}
             }
@@ -2929,11 +2953,25 @@ public:
 					newImage = new QCow2Disk(qcow2_header, newDisk, (Bit8u *)temp_line.c_str(), imagesize, sizes[0], (imagesize > 2880));
 				}
 				else{
-					fseeko64(newDisk,0L, SEEK_END);
-					sectors = (Bit64u)ftello64(newDisk) / (Bit64u)sizes[0];
-					imagesize = (Bit32u)(sectors / 2); /* orig. code wants it in KBs */
-					setbuf(newDisk,NULL);
-					newImage = new imageDisk(newDisk, (Bit8u *)temp_line.c_str(), imagesize, (imagesize > 2880));
+					char tmp[256];
+
+					fseeko64(newDisk, 0L, SEEK_SET);
+					fread(tmp,256,1,newDisk); // look for magic signatures
+
+					if (!memcmp(tmp,"VFD1.",5)) { /* FDD files */
+						fseeko64(newDisk,0L, SEEK_END);
+						sectors = (Bit64u)ftello64(newDisk) / (Bit64u)sizes[0];
+						imagesize = (Bit32u)(sectors / 2); /* orig. code wants it in KBs */
+						setbuf(newDisk,NULL);
+						newImage = new imageDiskVFD(newDisk, (Bit8u *)temp_line.c_str(), imagesize, (imagesize > 2880));
+					}
+					else {
+						fseeko64(newDisk,0L, SEEK_END);
+						sectors = (Bit64u)ftello64(newDisk) / (Bit64u)sizes[0];
+						imagesize = (Bit32u)(sectors / 2); /* orig. code wants it in KBs */
+						setbuf(newDisk,NULL);
+						newImage = new imageDisk(newDisk, (Bit8u *)temp_line.c_str(), imagesize, (imagesize > 2880));
+					}
 				}
 				
 				newImage->Addref();
