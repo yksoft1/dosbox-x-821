@@ -32,6 +32,7 @@
 #include "mouse.h"
 #include "callback.h"
 #include "setup.h"
+#include "bios_disk.h"
 #include "serialport.h"
 #include "mapper.h"
 #include "vga.h"
@@ -1518,6 +1519,252 @@ static Bitu INT18_PC98_Handler(void) {
     return CBRET_NONE;
 }
 
+#define PC98_FLOPPY_HIGHDENSITY     0x01
+#define PC98_FLOPPY_2HEAD           0x02
+#define PC98_FLOPPY_RPM_3MODE       0x04
+#define PC98_FLOPPY_RPM_IBMPC       0x08
+
+unsigned char PC98_BIOS_FLOPPY_BUFFER[32768]; /* 128 << 8 */
+
+static unsigned int PC98_FDC_SZ_TO_BYTES(unsigned int sz) {
+    return 128U << sz;
+}
+
+void PC98_BIOS_FDC_CALL_GEO_UNPACK(unsigned int &fdc_cyl,unsigned int &fdc_head,unsigned int &fdc_sect,unsigned int &fdc_sz) {
+    fdc_cyl = reg_cl;
+    fdc_head = reg_dh;
+    fdc_sect = reg_dl;
+    fdc_sz = reg_ch;
+    if (fdc_sz > 8) fdc_sz = 8;
+}
+
+void PC98_BIOS_FDC_CALL(unsigned int flags) {
+    static unsigned int fdc_cyl=0,fdc_head=0,fdc_sect=0,fdc_sz=0; // FIXME: Rename and move out. Making "static" is a hack here.
+    Bit32u img_heads=0,img_cyl=0,img_sect=0,img_ssz=0;
+    unsigned int status;
+    unsigned int size,accsize,unitsize;
+    unsigned long memaddr;
+    imageDisk *floppy;
+
+    /* AL bits[1:0] = which floppy drive */
+    floppy = GetINT13FloppyDrive(reg_al & 3);
+
+    /* what to do is in the lower 4 bits of AH */
+    switch (reg_ah & 0x0F) {
+        /* TODO: 0x00 = seek to track (in CL) */
+        /* TODO: 0x01 = test read? */
+        /* TODO: 0x03 = equipment flags? */
+        /* TODO: 0x04 = format detect? */
+        /* TODO: 0x05 = write disk */
+        /* TODO: 0x07 = recalibrate (seek to track 0) */
+        /* TODO: 0x0A = Read ID */
+        /* TODO: 0x0D = Format track */
+        /* TODO: 0x0E = ?? */
+        case 0x02: /* read sectors */
+        case 0x06: /* read sectors (what's the difference from 0x02?) */
+            /* AH bits[4:4] = If set, seek to track specified */
+            /* CL           = cylinder (track) */
+            /* CH           = sector size (0=128 1=256 2=512 3=1024 etc) */
+            /* DL           = sector number (1-based) */
+            /* DH           = head */
+            /* BX           = size (in bytes) of data to read */
+            /* ES:BP        = buffer to read data into */
+            if (floppy == NULL) {
+                CALLBACK_SCF(true);
+                reg_ah = 0x00;
+                /* TODO? Error code? */
+                return;
+            }
+	        floppy->Get_Geometry(&img_heads, &img_cyl, &img_sect, &img_ssz);
+
+            PC98_BIOS_FDC_CALL_GEO_UNPACK(/*&*/fdc_cyl,/*&*/fdc_head,/*&*/fdc_sect,/*&*/fdc_sz);
+            unitsize = PC98_FDC_SZ_TO_BYTES(fdc_sz);
+            if (unitsize != img_ssz || img_heads == 0 || img_cyl == 0 || img_sect == 0) {
+                CALLBACK_SCF(true);
+                reg_ah = 0x00;
+                /* TODO? Error code? */
+                return;
+            }
+
+            size = reg_bx;
+            memaddr = (SegValue(es) << 4U) + reg_bp;
+            while (size > 0) {
+                accsize = size > unitsize ? unitsize : size;
+
+                if (floppy->Read_Sector(fdc_head,fdc_cyl,fdc_sect,PC98_BIOS_FLOPPY_BUFFER) != 0) {
+                    CALLBACK_SCF(true);
+                    reg_ah = 0x00;
+                    /* TODO? Error code? */
+                    return;
+                }
+
+                for (unsigned int i=0;i < accsize;i++)
+                    mem_writeb(memaddr+i,PC98_BIOS_FLOPPY_BUFFER[i]);
+
+                memaddr += accsize;
+                size -= accsize;
+
+                if ((++fdc_sect) > img_sect) {
+                    fdc_sect = 1;
+                    if ((++fdc_head) >= img_heads) {
+                        fdc_head = 0;
+                        fdc_cyl++;
+                    }
+                }
+            }
+
+            reg_ah = 0x00;
+            CALLBACK_SCF(false);
+            break;
+        case 0x04: /* drive status */
+            status = 0;
+
+            /* TODO: bit 4 is set if write protected */
+
+            if (reg_al & 0x80) { /* high density */
+                status |= 0x01;
+            }
+            else { /* double density */
+                /* TODO: */
+                status |= 0x01;
+            }
+
+            if ((reg_ax & 0x8F40) == 0x8400) {
+                status |= 8;        /* 1MB/640KB format, spindle speed for 3-mode */
+                if (reg_ah & 0x40) /* DOSBox-X always supports 1.44MB */
+                    status |= 4;    /* 1.44MB format, spindle speed for IBM PC format */
+            }
+
+            if (floppy == NULL)
+                status |= 0xC0;
+
+            reg_ah = status;
+            CALLBACK_SCF(false);
+            break;
+        /* TODO: 0x00 = seek to track (in CL) */
+        /* TODO: 0x01 = test read? */
+        /* TODO: 0x03 = equipment flags? */
+        /* TODO: 0x04 = format detect? */
+        /* TODO: 0x05 = write disk */
+        /* TODO: 0x07 = recalibrate (seek to track 0) */
+        /* TODO: 0x0A = Read ID */
+        /* TODO: 0x0D = Format track */
+        /* TODO: 0x0E = ?? */
+        case 0x05: /* write sectors */
+            /* AH bits[4:4] = If set, seek to track specified */
+            /* CL           = cylinder (track) */
+            /* CH           = sector size (0=128 1=256 2=512 3=1024 etc) */
+            /* DL           = sector number (1-based) */
+            /* DH           = head */
+            /* BX           = size (in bytes) of data to read */
+            /* ES:BP        = buffer to write data from */
+            if (floppy == NULL) {
+                CALLBACK_SCF(true);
+                reg_ah = 0x00;
+                /* TODO? Error code? */
+                return;
+            }
+	        floppy->Get_Geometry(&img_heads, &img_cyl, &img_sect, &img_ssz);
+
+            /* TODO: Error if write protected */
+
+            PC98_BIOS_FDC_CALL_GEO_UNPACK(/*&*/fdc_cyl,/*&*/fdc_head,/*&*/fdc_sect,/*&*/fdc_sz);
+            unitsize = PC98_FDC_SZ_TO_BYTES(fdc_sz);
+            if (unitsize != img_ssz || img_heads == 0 || img_cyl == 0 || img_sect == 0) {
+                CALLBACK_SCF(true);
+                reg_ah = 0x00;
+                /* TODO? Error code? */
+                return;
+            }
+
+            size = reg_bx;
+            memaddr = (SegValue(es) << 4U) + reg_bp;
+            while (size > 0) {
+                accsize = size > unitsize ? unitsize : size;
+
+                for (unsigned int i=0;i < accsize;i++)
+                    PC98_BIOS_FLOPPY_BUFFER[i] = mem_readb(memaddr+i);
+
+                if (floppy->Write_Sector(fdc_head,fdc_cyl,fdc_sect,PC98_BIOS_FLOPPY_BUFFER) != 0) {
+                    CALLBACK_SCF(true);
+                    reg_ah = 0x00;
+                    /* TODO? Error code? */
+                    return;
+                }
+
+                memaddr += accsize;
+                size -= accsize;
+
+                if ((++fdc_sect) > img_sect) {
+                    fdc_sect = 1;
+                    if ((++fdc_head) >= img_heads) {
+                        fdc_head = 0;
+                        fdc_cyl++;
+                    }
+                }
+            }
+
+            reg_ah = 0x00;
+            CALLBACK_SCF(false);
+            break;
+        case 0x07: /* recalibrate (seek to track 0) */
+            if (floppy == NULL) {
+                CALLBACK_SCF(true);
+                reg_ah = 0x00;
+                /* TODO? Error code? */
+                return;
+            }
+
+            reg_ah = 0x00;
+            CALLBACK_SCF(false);
+            break;
+        case 0x0A: /* read ID */
+            if (floppy == NULL) {
+                CALLBACK_SCF(true);
+                reg_ah = 0x00;
+                /* TODO? Error code? */
+                return;
+            }
+
+	        floppy->Get_Geometry(&img_heads, &img_cyl, &img_sect, &img_ssz);
+ 
+            if (reg_ah & 0x10) { // seek to track number in CL
+                if (reg_cl >= img_cyl) {
+                    CALLBACK_SCF(true);
+                    reg_ah = 0x00;
+                    /* TODO? Error code? */
+                    return;
+                }
+
+                fdc_cyl = img_cyl;
+            }
+
+            reg_cl = fdc_cyl;
+            reg_dh = fdc_head;
+            reg_dl = fdc_sect;
+            /* ^ FIXME: A more realistic emulation would return a random number from 1 to N
+             *          where N=sectors/track because the floppy motor is running and tracks
+             *          are moving past the head. */
+            reg_ch = fdc_sz;
+
+            reg_ah = 0x00;
+            CALLBACK_SCF(false);
+            break;
+        default:
+            LOG_MSG("PC-98 INT 1Bh unknown FDC BIOS call AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
+                    reg_ax,
+                    reg_bx,
+                    reg_cx,
+                    reg_dx,
+                    reg_si,
+                    reg_di,
+                    SegValue(ds),
+                    SegValue(es));
+            CALLBACK_SCF(true);
+            break;
+    };
+}
+
 static Bitu INT19_PC98_Handler(void) {
     LOG_MSG("PC-98 INT 19h unknown call AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
         reg_ax,
@@ -1554,15 +1801,34 @@ static Bitu INT1A_PC98_Handler(void) {
 }
 
 static Bitu INT1B_PC98_Handler(void) {
-    LOG_MSG("PC-98 INT 1Bh unknown call AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
-        reg_ax,
-        reg_bx,
-        reg_cx,
-        reg_dx,
-        reg_si,
-        reg_di,
-        SegValue(ds),
-        SegValue(es));
+    /* As BIOS interfaces for disk I/O go, this is fairly unusual */
+    switch (reg_al & 0xF0) {
+        /* floppy disk access */
+        /* AL bits[1:0] = floppy drive number */
+        /* Uses INT42 if high density, INT41 if double density */
+        /* AH bits[3:0] = command */
+        case 0x90: /* 1.2MB HD */
+            PC98_BIOS_FDC_CALL(PC98_FLOPPY_HIGHDENSITY|PC98_FLOPPY_2HEAD|PC98_FLOPPY_RPM_3MODE);
+            break;
+        case 0x30: /* 1.44MB HD (NTS: not supported until the early 1990s) */
+        case 0xB0:
+            PC98_BIOS_FDC_CALL(PC98_FLOPPY_HIGHDENSITY|PC98_FLOPPY_2HEAD|PC98_FLOPPY_RPM_IBMPC);
+            break;
+        /* TODO: Other disk formats */
+        /* TODO: Future SASI/SCSI BIOS emulation for hard disk images */
+        default:
+            LOG_MSG("PC-98 INT 1Bh unknown call AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
+                    reg_ax,
+                    reg_bx,
+                    reg_cx,
+                    reg_dx,
+                    reg_si,
+                    reg_di,
+                    SegValue(ds),
+                    SegValue(es));
+            CALLBACK_SCF(true);
+            break;
+    };
 
     return CBRET_NONE;
 }
@@ -1753,6 +2019,18 @@ static Bitu INT8_PC98_Handler(void) {
     Bit16u counter = mem_readw(0x58A) - 1;
     mem_writew(0x58A,counter);
 
+    /* NTS 2018/02/23: I just confirmed from the ROM BIOS of an actual
+     *                 PC-98 system that this implementation and Neko Project II
+     *                 are 100% accurate to what the BIOS actually does.
+     *                 INT 07h really is the "timer tick" interrupt called
+     *                 from INT 08h / IRQ 0, and the BIOS really does call
+     *                 INT 1Ch AH=3 from INT 08h if the tick count has not
+     *                 yet reached zero.
+     *
+     *                 I'm guessing NEC's BIOS developers invented this prior
+     *                 to the Intel 80286 and it's INT 07h
+     *                 "Coprocessor not present" exception. */	
+	
     if (counter == 0) {
         /* mask IRQ 0 */
         IO_WriteB(0x02,IO_ReadB(0x02) | 0x01);
@@ -3252,9 +3530,107 @@ private:
 			
 			write_FFFF_PC98_signature();
 			
+            unsigned char memsize_real_code = 0;
+            Bitu mempages = MEM_TotalPages(); /* in 4KB pages */
+
+            /* NTS: Fill in the 3-bit code in FLAGS1 that represents
+             *      how much lower conventional memory is in the system.
+             *
+             *      Note that MEM.EXE requires this value, or else it
+             *      will complain about broken UMB linkage and fail
+             *      to show anything else. */
+            /* TODO: In the event we eventually support "high resolution mode"
+             *       we can indicate 768KB here, code == 5, meaning that
+             *       the RAM extends up to 0xBFFFF instead of 0x9FFFF */
+            if (mempages >= (640UL/4UL))        /* 640KB */
+                memsize_real_code = 4;
+            else if (mempages >= (512UL/4UL))   /* 512KB */
+                memsize_real_code = 3;
+            else if (mempages >= (384UL/4UL))   /* 384KB */
+                memsize_real_code = 2;
+            else if (mempages >= (256UL/4UL))   /* 256KB */
+                memsize_real_code = 1;
+            else                                /* 128KB */
+                memsize_real_code = 0;
+			
 			/* clear out 0x50 segment */
 			for (unsigned int i=0;i < 0x100;i++) phys_writeb(0x500+i,0);
 			
+            /* extended memory size (286 systems, below 16MB) */
+            if (mempages > (1024UL/4UL)) {
+                unsigned int ext = ((mempages - (1024UL/4UL)) * 4096UL) / (128UL * 1024UL); /* convert to 128KB units */
+
+                /* extended memory, up to 16MB capacity (for 286 systems?)
+                 *
+                 * MS-DOS drivers will "allocate" for themselves by taking from the top of
+                 * extended memory then subtracting from this value.
+                 *
+                 * capacity does not include conventional memory below 1MB, nor any memory
+                 * above 16MB.
+                 *
+                 * PC-98 systems may reserve the top 1MB, limiting the top to 15MB instead.
+                 *
+                 * 0x70 = 128KB * 0x70 = 14MB
+                 * 0x78 = 128KB * 0x70 = 15MB */
+                if (ext > 0x78) ext = 0x78;
+
+                mem_writeb(0x401,ext);
+            }
+            else {
+                mem_writeb(0x401,0x00);
+            }
+
+            /* extended memory size (386 systems, at or above 16MB) */
+            if (mempages > ((1024UL*16UL)/4UL)) {
+                unsigned int ext = ((mempages - ((1024UL*16UL)/4UL)) * 4096UL) / (1024UL * 1024UL); /* convert to MB */
+
+                /* extended memory, at or above 16MB capacity (for 386+ systems?)
+                 *
+                 * MS-DOS drivers will "allocate" for themselves by taking from the top of
+                 * extended memory then subtracting from this value.
+                 *
+                 * capacity does not include conventional memory below 1MB, nor any memory
+                 * below 16MB. */
+                if (ext > 0xFFFE) ext = 0xFFFE;
+
+                mem_writew(0x594,ext);
+            }
+            else {
+                mem_writeb(0x594,0x00);
+            }
+
+            /* BIOS flags */
+            /* bit[7:7] = Startup            1=hot start    0=cold start
+             * bit[6:6] = BASIC type         ??
+             * bit[5:5] = Keyboard beep      1=don't beep   0=beep          ... when buffer full
+             * bit[4:4] = Expansion conv RAM 1=present      0=absent
+             * bit[3:3] = ??
+             * bit[2:2] = ??
+             * bit[1:1] = HD mode            1=1MB mode     0=640KB mode    ... of the floppy drive
+             * bit[0:0] = Model              1=other        0=PC-9801 original */
+            /* NTS: MS-DOS 5.0 appears to reduce it's BIOS calls and render the whole
+             *      console as green IF bit 0 is clear.
+             *
+             *      If bit 0 is set, INT 1Ah will be hooked by MS-DOS and, for some odd reason,
+             *      MS-DOS's hook proc will call to our INT 1Ah + 0x19 bytes. */
+            mem_writeb(0x500,0x01 | 0x02/*high density drive*/);
+
+            /* BIOS flags */
+            /* timer setup will set/clear bit 7 */
+            /* bit[7:7] = system clock freq  1=8MHz         0=5/10Mhz
+             *          = timer clock freq   1=1.9968MHz    0=2.4576MHz
+             * bit[6:6] = CPU                1=V30          0=Intel (8086 through Pentium)
+             * bit[5:5] = Model info         1=Other model  0=PC-9801 Muji, PC-98XA
+             * bit[4:4] = Model info         ...
+             * bit[3:3] = Model info         1=High res     0=normal
+             * bit[2:0] = Realmode memsize
+             *                             000=128KB      001=256KB
+             *                             010=384KB      011=512KB
+             *                             100=640KB      101=768KB
+             *
+             * Ref: http://hackipedia.org/browse/Computer/Platform/PC,%20NEC%20PC-98/Collections/Undocumented%209801,%209821%20Volume%202%20(webtech.co.jp)/memsys.txt */
+            mem_writeb(0x501,0x20 | memsize_real_code);
+
 			/* set up some default state */
 			mem_writeb(0x54C/*MEMB_PRXCRT*/,0x4F); /* default graphics layer off, 24KHz hsync */
 			
@@ -3432,6 +3808,42 @@ private:
 			callback[3].Install(&INT1A_PC98_Handler,CB_IRET,"Int 1A ???");
 			callback[3].Set_RealVec(0x1A,/*reinstall*/true);
 
+            /* MS-DOS 5.0 FIXUP:
+             * - For whatever reason, if we set bits in the BIOS data area that
+             *   indicate we're NOT the original model of the PC-98, MS-DOS will
+             *   hook our INT 1Ah and then call down to 0x19 bytes into our
+             *   INT 1Ah procedure. If anyone can explain this, I'd like to hear it. --J.C.
+             *
+             * NTS: On real hardware, the BIOS appears to have an INT 1Ah, a bunch of NOPs,
+             *      then at 0x19 bytes into the procedure, the actual handler. This is what
+             *      MS-DOS is pointing at.
+             *
+             *      But wait, there's more.
+             *
+             *      MS-DOS calldown pushes DS and DX onto the stack (after the IRET frame)
+             *      before JMPing into the BIOS.
+             *
+             *      Apparently the function at INT 1Ah + 0x19 is expected to do this:
+             *
+             *      <function code>
+             *      POP     DX
+             *      POP     DS
+             *      IRET
+             *
+             *      I can only imaging what a headache this might have caused NEC when
+             *      maintaining the platform and compatibility! */
+            {
+                Bitu addr = callback[3].Get_RealPointer();
+                addr = ((addr >> 16) << 4) + (addr & 0xFFFF);
+
+                /* to make this work, we need to pop the two regs, then JMP to our
+                 * callback and proceed as normal. */
+                phys_writeb(addr + 0x19,0x5A);       // POP DX
+                phys_writeb(addr + 0x1A,0x1F);       // POP DS
+                phys_writeb(addr + 0x1B,0xEB);       // jmp short ...
+                phys_writeb(addr + 0x1C,0x100 - 0x1D);
+            }
+						
 			/* INT 1Bh *STUB* */
 			callback[4].Install(&INT1B_PC98_Handler,CB_IRET,"Int 1B ???");
 			callback[4].Set_RealVec(0x1B,/*reinstall*/true);
