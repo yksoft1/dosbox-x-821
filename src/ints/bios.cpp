@@ -1845,8 +1845,32 @@ void PC98_Interval_Timer_Continue(void) {
     PIC_SetIRQMask(0,false);
 }
 
+unsigned char pc98_dec2bcd(unsigned char c) {
+	return ((c / 10) << 4) + (c % 10);
+}
+
 static Bitu INT1C_PC98_Handler(void) {
-    if (reg_ah == 0x02) { /* set interval timer (single event) */
+    if(reg_ah == 0x00) { /* read RTC */
+		time_t curtime;
+		struct tm *loctime;
+		curtime = time (NULL);
+		loctime = localtime (&curtime);
+
+		unsigned char tmp[6];
+
+		tmp[0] = pc98_dec2bcd(loctime->tm_year % 100);
+		tmp[1] = ((loctime->tm_mon + 1) << 4) + loctime->tm_wday;
+		tmp[2] = pc98_dec2bcd(loctime->tm_mday);
+		tmp[3] = pc98_dec2bcd(loctime->tm_hour);
+		tmp[4] = pc98_dec2bcd(loctime->tm_min);
+		tmp[5] = pc98_dec2bcd(loctime->tm_sec);
+		
+		unsigned long mem = (SegValue(es) << 4) + reg_bx;
+
+		for (unsigned int i=0;i < 6;i++)
+			mem_writeb(mem+i,tmp[i]);
+	}
+	else if (reg_ah == 0x02) { /* set interval timer (single event) */
         /* es:bx = interrupt handler to execute
          * cx = timer interval in ticks (FIXME: what units of time?) */
         mem_writew(0x1C,reg_bx);
@@ -1903,17 +1927,47 @@ static Bitu INT1E_PC98_Handler(void) {
     return CBRET_NONE;
 }
 
-static Bitu INT1F_PC98_Handler(void) {
-    LOG_MSG("PC-98 INT 1Fh unknown call AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
-        reg_ax,
-        reg_bx,
-        reg_cx,
-        reg_dx,
-        reg_si,
-        reg_di,
-        SegValue(ds),
-        SegValue(es));
+void PC98_EXTMEMCPY(void) {
+	bool enabled = MEM_A20_Enabled();
+	MEM_A20_Enable(true);
 
+	Bitu bytes = ((reg_cx - 1) & 0xFFFF) + 1; // bytes, except that 0 == 64KB
+	PhysPt data = SegPhys(es)+reg_bx;
+	PhysPt source = (mem_readd(data+0x12) & 0x00FFFFFF) + (mem_readb(data+0x17)<<24);
+	PhysPt dest = (mem_readd(data+0x1A) & 0x00FFFFFF) + (mem_readb(data+0x1F)<<24);
+
+	LOG_MSG("PC-98 memcpy: src=0x%x dst=0x%x data=0x%x count=0x%x",
+		(unsigned int)source,(unsigned int)dest,(unsigned int)data,(unsigned int)bytes);
+
+	MEM_BlockCopy(dest,source,bytes);
+	MEM_A20_Enable(enabled);
+	Segs.limit[cs] = 0xFFFF;
+	Segs.limit[ds] = 0xFFFF;
+	Segs.limit[es] = 0xFFFF;
+	Segs.limit[ss] = 0xFFFF;
+
+	CALLBACK_SCF(false);
+}
+
+static Bitu INT1F_PC98_Handler(void) {
+	switch (reg_ah) {
+		case 0x90:
+			/* Copy extended memory */
+			PC98_EXTMEMCPY();
+			break;
+		default:
+			LOG_MSG("PC-98 INT 1Fh unknown call AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X DS=%04X ES=%04X",
+				reg_ax,
+				reg_bx,
+				reg_cx,
+				reg_dx,
+				reg_si,
+				reg_di,
+				SegValue(ds),
+				SegValue(es));
+			CALLBACK_SCF(true);
+			break;
+	}
     return CBRET_NONE;
 }
 
