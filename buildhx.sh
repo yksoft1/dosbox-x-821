@@ -15,12 +15,14 @@ make -j4
 make install
 
 cd ../../
+mv /mingw/lib/libSDL_net.a /mingw/lib/libSDL_net.a1
 if test -f configure; then
 	configure --disable-mt32 --disable-opengl
 else
 	bash autogen.sh
 	configure --disable-mt32 --disable-opengl
 fi
+mv /mingw/lib/libSDL_net.a1 /mingw/lib/libSDL_net.a
 make -j4
 cd src
 strip dosbox-x.exe
