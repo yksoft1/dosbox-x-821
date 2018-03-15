@@ -2839,7 +2839,7 @@ private:
 		return true;
 	}
 	
-bool AttachToBios(imageDisk* image, const unsigned char bios_drive_index) {
+	bool AttachToBios(imageDisk* image, const unsigned char bios_drive_index) {
 		if (bios_drive_index >= MAX_DISK_IMAGES) return false;
 		if (imageDiskList[bios_drive_index] != NULL) {
 			/* Notify IDE ATA emulation if a drive is already there */
@@ -2851,15 +2851,17 @@ bool AttachToBios(imageDisk* image, const unsigned char bios_drive_index) {
 
 		// let FDC know if we mounted a floppy
 		if (bios_drive_index <= 1) FDC_AssignINT13Disk(bios_drive_index);
+		return true;
 	}
 
-bool AttachToBiosAndIde(imageDisk* image, const unsigned char bios_drive_index, const unsigned char ide_index, const bool ide_slave) {
+	bool AttachToBiosAndIde(imageDisk* image, const unsigned char bios_drive_index, const unsigned char ide_index, const bool ide_slave) {
 		if (!AttachToBios(image, bios_drive_index)) return false;
 		//if hard drive image, and if ide controller is specified
 		if (bios_drive_index == 2 || bios_drive_index == 3) {
 			if (ide_index >= 0) IDE_Hard_Disk_Attach(ide_index, ide_slave, bios_drive_index);
 			updateDPT();
 		}
+		return true;
 	}
 
 	void DetachFromBios(imageDisk* image) {
