@@ -31,9 +31,11 @@ class PC98UTIL : public Program {
 public:
 	void Run(void) {
         string arg;
+		bool got_opt=false;
 
         cmd->BeginOpt();
         while (cmd->GetOpt(/*&*/arg)) {
+			got_opt=true;
             if (arg == "?" || arg == "help") {
                 doHelp();
                 break;
@@ -82,6 +84,7 @@ public:
             }
         }
         cmd->EndOpt();
+		if(!got_opt) doHelp();
 	}
     void doHelp(void) {
         WriteOut("PC98UTIL PC-98 emulation utility\n");
