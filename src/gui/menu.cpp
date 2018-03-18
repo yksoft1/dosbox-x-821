@@ -945,11 +945,17 @@ int Reflect_Menu(void) {
 	EnableMenuItem(m_handle, ID_PC98_FOURPARTITIONSGRAPHICS, (!IS_PC98_ARCH) ? MF_DISABLED : MF_ENABLED);
 	EnableMenuItem(m_handle, ID_PC98_200SCANLINEEFFECT, (!IS_PC98_ARCH) ? MF_DISABLED : MF_ENABLED);
 	EnableMenuItem(m_handle, ID_PC98_GDC5MHZ, (!IS_PC98_ARCH) ? MF_DISABLED : MF_ENABLED);
+	EnableMenuItem(m_handle, ID_PC98_ENABLEEGC, (!IS_PC98_ARCH) ? MF_DISABLED : MF_ENABLED);
+	EnableMenuItem(m_handle, ID_PC98_ENABLEGRCG, (!IS_PC98_ARCH) ? MF_DISABLED : MF_ENABLED);
+	EnableMenuItem(m_handle, ID_PC98_ENABLE16COLORS, (!IS_PC98_ARCH) ? MF_DISABLED : MF_ENABLED);
 
 	extern bool gdc_5mhz_mode;
 	extern bool pc98_allow_scanline_effect;
 	extern bool pc98_allow_4_display_partitions;
-
+	extern bool enable_pc98_egc;
+	extern bool enable_pc98_grcg;
+	extern bool enable_pc98_16color;
+	
 	Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 	
 	int pc98rate = dosbox_section->Get_int("pc-98 timer master frequency");
@@ -964,6 +970,10 @@ int Reflect_Menu(void) {
 	CheckMenuItem(m_handle, ID_PC98_200SCANLINEEFFECT, (IS_PC98_ARCH && pc98_allow_scanline_effect) ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_PC98_GDC5MHZ, (IS_PC98_ARCH && gdc_5mhz_mode) ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_PC98_FOURPARTITIONSGRAPHICS, (IS_PC98_ARCH && pc98_allow_4_display_partitions) ? MF_CHECKED : MF_STRING);
+
+	CheckMenuItem(m_handle, ID_PC98_ENABLEEGC, (IS_PC98_ARCH && enable_pc98_egc) ? MF_CHECKED : MF_STRING);
+	CheckMenuItem(m_handle, ID_PC98_ENABLEGRCG, (IS_PC98_ARCH && enable_pc98_grcg) ? MF_CHECKED : MF_STRING);
+	CheckMenuItem(m_handle, ID_PC98_ENABLE16COLORS, (IS_PC98_ARCH && enable_pc98_16color) ? MF_CHECKED : MF_STRING);
 	
 	CheckMenuItem(m_handle, ID_MOUSE, Mouse_Drv ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_AUTOCYCLE, (CPU_CycleAutoAdjust) ? MF_CHECKED : MF_STRING);
@@ -1954,7 +1964,51 @@ void MSG_Loop(void) {
 				if (IS_PC98_ARCH) pc98_clear_graphics();
 				break;
 			}
-			
+			case ID_PC98_ENABLEEGC: {
+				void gdc_egc_enable_update_vars(void);
+				extern bool enable_pc98_egc;
+				if(IS_PC98_ARCH) {
+					enable_pc98_egc = !enable_pc98_egc;
+					gdc_egc_enable_update_vars();
+					
+					Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+					if (enable_pc98_egc)
+						dosbox_section->HandleInputline("pc-98 enable egc=1");
+					else
+						dosbox_section->HandleInputline("pc-98 enable egc=0");
+				}
+				break;
+			}
+			case ID_PC98_ENABLEGRCG: { //TODO: There shouldn't be a PC-98 system with EGC but without GRCG!
+				extern bool enable_pc98_grcg;
+				extern bool enable_pc98_16color;
+				if(IS_PC98_ARCH) {
+					enable_pc98_grcg = !enable_pc98_grcg;
+					mem_writeb(0x54C,(enable_pc98_grcg ? 0x02 : 0x00) | (enable_pc98_16color ? 0x04 : 0x00));
+					
+					Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+					if (enable_pc98_egc)
+						dosbox_section->HandleInputline("pc-98 enable grcg=1");
+					else
+						dosbox_section->HandleInputline("pc-98 enable grcg=0");
+				}
+				break;
+			}
+			case ID_PC98_ENABLE16COLORS: {
+				extern bool enable_pc98_grcg;
+				extern bool enable_pc98_16color;
+				if(IS_PC98_ARCH) {
+					enable_pc98_16color = !enable_pc98_16color;
+					mem_writeb(0x54C,(enable_pc98_grcg ? 0x02 : 0x00) | (enable_pc98_16color ? 0x04 : 0x00));
+					
+					Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+					if (enable_pc98_egc)
+						dosbox_section->HandleInputline("pc-98 enable 16-color=1");
+					else
+						dosbox_section->HandleInputline("pc-98 enable 16-color=0");
+				}
+				break;
+			}
 			case ID_KEY_NONE: SetVal("dos", "keyboardlayout", "auto"); break;
 			case ID_KEY_BG: SetVal("dos", "keyboardlayout", "bg"); break;
 			case ID_KEY_CZ: SetVal("dos", "keyboardlayout", "cz"); break;
