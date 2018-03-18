@@ -1987,7 +1987,7 @@ void MSG_Loop(void) {
 					mem_writeb(0x54C,(enable_pc98_grcg ? 0x02 : 0x00) | (enable_pc98_16color ? 0x04 : 0x00));
 					
 					Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
-					if (enable_pc98_egc)
+					if (enable_pc98_grcg)
 						dosbox_section->HandleInputline("pc-98 enable grcg=1");
 					else
 						dosbox_section->HandleInputline("pc-98 enable grcg=0");
@@ -2002,7 +2002,7 @@ void MSG_Loop(void) {
 					mem_writeb(0x54C,(enable_pc98_grcg ? 0x02 : 0x00) | (enable_pc98_16color ? 0x04 : 0x00));
 					
 					Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
-					if (enable_pc98_egc)
+					if (enable_pc98_16color)
 						dosbox_section->HandleInputline("pc-98 enable 16-color=1");
 					else
 						dosbox_section->HandleInputline("pc-98 enable 16-color=0");
