@@ -1981,10 +1981,10 @@ void MSG_Loop(void) {
 			}
 			case ID_PC98_ENABLEGRCG: { //TODO: There shouldn't be a PC-98 system with EGC but without GRCG!
 				extern bool enable_pc98_grcg;
-				extern bool enable_pc98_16color;
+				void gdc_grcg_enable_update_vars(void);
 				if(IS_PC98_ARCH) {
 					enable_pc98_grcg = !enable_pc98_grcg;
-					mem_writeb(0x54C,(enable_pc98_grcg ? 0x02 : 0x00) | (enable_pc98_16color ? 0x04 : 0x00));
+					gdc_grcg_enable_update_vars();
 					
 					Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 					if (enable_pc98_grcg)
@@ -1995,11 +1995,11 @@ void MSG_Loop(void) {
 				break;
 			}
 			case ID_PC98_ENABLE16COLORS: {
-				extern bool enable_pc98_grcg;
 				extern bool enable_pc98_16color;
+				void gdc_16color_enable_update_vars(void);
 				if(IS_PC98_ARCH) {
 					enable_pc98_16color = !enable_pc98_16color;
-					mem_writeb(0x54C,(enable_pc98_grcg ? 0x02 : 0x00) | (enable_pc98_16color ? 0x04 : 0x00));
+					gdc_16color_enable_update_vars();
 					
 					Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 					if (enable_pc98_16color)
