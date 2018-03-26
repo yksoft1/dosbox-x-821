@@ -1,0 +1,12 @@
+Notes for building under MSYS2/mingw-w64
+1. autogen.sh is not working at all in MSYS2. Why?
+2. Use these build flags:
+	CFLAGS="-O3 -static" CXXFLAGS="-O3 -static -DHX_DOS" ./configure --disable-mt32
+	CFLAGS="-O3 -static" CXXFLAGS="-O3 -static " ./configure 
+	you need -static instead of --static.... options.
+3. Under x86_64 mode, dynamic core is not building. It's a known problem in johncampbell123's original.
+4. "sse2_unavailable" problem.
+	fixed!
+	
+
+	
