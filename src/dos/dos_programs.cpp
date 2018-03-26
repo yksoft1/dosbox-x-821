@@ -2413,7 +2413,7 @@ public:
 				WriteOut("Cannot mount floppy in hard drive position");
 			}
 			else {
-				if (AttachToBiosAndIde(newImage, driveIndex, ide_index, ide_slave)) {
+				if (AttachToBiosAndIdeByIndex(newImage, driveIndex, ide_index, ide_slave)) {
 				WriteOut(MSG_Get("PROGRAM_IMGMOUNT_MOUNT_NUMBER"), drive - '0', temp_line.c_str());
 				}
 				else {
@@ -2821,7 +2821,7 @@ private:
 		}
 
 		AddToDriveManager(drive, newDrive, 0xF0);
-		AttachToBios(newImage, driveIndex);
+		AttachToBiosByLetter(newImage, drive);
 		
 		WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_2"), drive, "el torito floppy");
 		
@@ -2875,18 +2875,7 @@ private:
 
 		if (imgDisks.size() == 1) {
 			imageDisk* image = ((fatDrive*)imgDisks[0])->loadedDisk;
-			if (image->hardDrive) {
-				for (int index = 2; index < MAX_DISK_IMAGES; index++) {
-					if (imageDiskList[index] == NULL) {
-						AttachToBiosAndIde(image, index, ide_index, ide_slave);
-						break;
-					}
-				}
-			}
-			else if ((drive - 'A') < 2) {
-				//only mount floppies at A: or B: in the BIOS
-				AttachToBios(image, drive - 'A'); 
-			}
+			AttachToBiosAndIdeByLetter(image, drive, ide_index, ide_slave);
 		}
 		return true;
 	}
@@ -2994,23 +2983,12 @@ private:
 
 		WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_RAMDRIVE"), drive);
 
-		if (dsk->hardDrive) {
-			for (int index = 2; index < MAX_DISK_IMAGES; index++) {
-				if (imageDiskList[index] == NULL) {
-					AttachToBiosAndIde(dsk, index, ide_index, ide_slave);
-					break;
-				}
-			}
-		}
-		else if ((drive - 'A') < 2) {
-			//only mount A: or B: floppies to BIOS
-			AttachToBios(dsk, drive - 'A');
-		}
+		AttachToBiosAndIdeByLetter(dsk, drive, ide_index, ide_slave);
 
 		return true;
 	}
 	
-	bool AttachToBios(imageDisk* image, const unsigned char bios_drive_index) {
+	bool AttachToBiosByIndex(imageDisk* image, const unsigned char bios_drive_index) {
 		if (bios_drive_index >= MAX_DISK_IMAGES) return false;
 		if (imageDiskList[bios_drive_index] != NULL) {
 			/* Notify IDE ATA emulation if a drive is already there */
@@ -3029,8 +3007,8 @@ private:
 		return true;
 	}
 
-	bool AttachToBiosAndIde(imageDisk* image, const unsigned char bios_drive_index, const unsigned char ide_index, const bool ide_slave) {
-		if (!AttachToBios(image, bios_drive_index)) return false;
+	bool AttachToBiosAndIdeByIndex(imageDisk* image, const unsigned char bios_drive_index, const unsigned char ide_index, const bool ide_slave) {
+		if (!AttachToBiosByIndex(image, bios_drive_index)) return false;
 		//if hard drive image, and if ide controller is specified
 		if (bios_drive_index >= 2 || bios_drive_index < MAX_DISK_IMAGES) {
 			if (ide_index >= 0) IDE_Hard_Disk_Attach(ide_index, ide_slave, bios_drive_index);
@@ -3039,6 +3017,53 @@ private:
 		return true;
 	}
 
+	bool AttachToBiosByLetter(imageDisk* image, const char drive) {
+		if (image->hardDrive) {
+			//for hard drives, mount hard drives at first available index
+			for (int index = 2; index < MAX_DISK_IMAGES; index++) {
+				if (imageDiskList[index] == NULL) {
+					return AttachToBiosByIndex(image, index);
+				}
+			}
+		}
+		else if (IS_PC98_ARCH) {
+			//for pc-98 machines, mount floppies at first available index
+			for (int index = 0; index < 2; index++) {
+				if (imageDiskList[index] == NULL) {
+					return AttachToBiosByIndex(image, index);
+				}
+			}
+		}
+		else if ((drive - 'A') < 2) {
+			//for PCs, mount floppies only if A: or B: is specified, and then if so, at specified index
+			return AttachToBiosByIndex(image, drive - 'A');
+		}
+		return false;
+	}
+
+	bool AttachToBiosAndIdeByLetter(imageDisk* image, const char drive, const unsigned char ide_index, const bool ide_slave) {
+		if (image->hardDrive) {
+			//for hard drives, mount hard drives at first available index
+			for (int index = 2; index < MAX_DISK_IMAGES; index++) {
+				if (imageDiskList[index] == NULL) {
+					return AttachToBiosAndIdeByIndex(image, index, ide_index, ide_slave);
+				}
+			}
+		}
+		else if (IS_PC98_ARCH) {
+			//for pc-98 machines, mount floppies at first available index
+			for (int index = 0; index < 2; index++) {
+				if (imageDiskList[index] == NULL) {
+					return AttachToBiosByIndex(image, index);
+				}
+			}
+		} else if ((drive - 'A') < 2) {
+			//for PCs, mount floppies only if A: or B: is specified, and then if so, at specified index
+			return AttachToBiosByIndex(image, drive - 'A');
+		}
+		return false;
+	}	
+	
 	void DetachFromBios(imageDisk* image) {
 		if (image) {
 			for (int index = 0; index < MAX_DISK_IMAGES; index++) {
