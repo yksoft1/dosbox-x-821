@@ -110,6 +110,10 @@ void CheckSSESupport()
 	sse2_available = ((d >> 26) & 1)?true:false;
 #endif
 }
+#else
+#if defined(_M_AMD64) || defined(__MINGW64__) //SSE2 always available in x86_64
+bool sse2_available = true;
+#endif
 #endif
 /*=============================================================================*/
 
