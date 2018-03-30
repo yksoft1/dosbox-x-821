@@ -136,10 +136,9 @@ Bit16u DOS_CONSTRING_SEG=0xa8;
 Bit16u DOS_SDA_SEG=0xb2;		// dos swappable area
 Bit16u DOS_SDA_OFS=0;
 Bit16u DOS_CDS_SEG=0x108;
-Bit16u DOS_FIRST_SHELL=0x118;
-Bit16u DOS_FIRST_SHELL_END=0x158;
 Bit16u DOS_MEM_START=0x158;	 // regression to r3437 fixes nascar 2 colors
 Bit16u minimum_mcb_segment=0x70;
+Bit16u minimum_mcb_free=0x70;
 Bit16u minimum_dos_initial_private_segment=0x70;
 
 Bit16u DOS_PRIVATE_SEGMENT=0;//0xc800;
@@ -1882,7 +1881,6 @@ Bitu MEM_PageMask(void);
 
 #include <assert.h>
 
-extern unsigned int dosbox_shell_env_size;
 extern bool dos_con_use_int16_to_detect_input;
 extern bool dbg_zero_on_dos_allocmem;
 
@@ -1923,6 +1921,7 @@ public:
 		enable_share_exe_fake = section->Get_bool("share");
 		enable_filenamechar = section->Get_bool("filenamechar");
 		dos_initial_hma_free = section->Get_int("hma free space");
+		minimum_mcb_free = section->Get_hex("minimum mcb free");
 		minimum_mcb_segment = section->Get_hex("minimum mcb segment");
 		private_segment_in_umb = section->Get_bool("private area in umb");
 		enable_collating_uppercase = section->Get_bool("collating and uppercase");
@@ -1989,16 +1988,10 @@ public:
 			private_always_from_umb = false;
 		}
 
-		unsigned int DOS_FIRST_SHELL_SIZE;
 
 		if (minimum_mcb_segment > 0x8000) minimum_mcb_segment = 0x8000; /* FIXME: Clip against available memory */
 
 		if (dynamic_dos_kernel_alloc) {
-			if (dosbox_shell_env_size == 0)
-				dosbox_shell_env_size = (0x158 - (0x118 + 19)) << 4; /* equivalent to mainline DOSBox */
-			else
-				dosbox_shell_env_size = (dosbox_shell_env_size+15)&(~15); /* round up to paragraph */
-
 			/* we make use of the DOS_GetMemory() function for the dynamic allocation */
 			if (mainline_compatible_mapping) {
 				DOS_IHSEG = 0x70;
@@ -2047,8 +2040,6 @@ public:
 			LOG(LOG_MISC,LOG_DEBUG)("Dynamic DOS kernel mode, structures will be allocated from pool 0x%04x-0x%04x",
 				DOS_PRIVATE_SEGMENT,DOS_PRIVATE_SEGMENT_END-1);
 
-			DOS_FIRST_SHELL_SIZE = 19 + (dosbox_shell_env_size >> 4);
-
 			if (!mainline_compatible_mapping) DOS_IHSEG = DOS_GetMemory(1,"DOS_IHSEG");
 
             /* DOS_INFOBLOCK_SEG contains the entire List of Lists, though the INT 21h call returns seg:offset with offset nonzero */
@@ -2059,10 +2050,6 @@ public:
 			DOS_SDA_SEG = DOS_GetMemory(0x56,"DOS_SDA_SEG");		// was 0xB2  (0xB2 + 0x56 = 0x108)
 			DOS_SDA_OFS = 0;
 			DOS_CDS_SEG = DOS_GetMemory(0x10,"DOS_CDA_SEG");		// was 0x108
-			DOS_FIRST_SHELL = DOS_GetMemory(DOS_FIRST_SHELL_SIZE,"DOS_FIRST_SHELL");	// was 0x118
-			/* TODO: We should decide the shell's environment block segment here too */
-			DOS_FIRST_SHELL_END = DOS_FIRST_SHELL + DOS_FIRST_SHELL_SIZE; /* see src/shell/shell.cpp line 722 for more information */
-			/* defer DOS_MEM_START until right before SetupMemory */
 		}
 		else {
 			if (MEM_TotalPages() < 2) E_Exit("Not enough RAM for mainline compatible fixed kernel mapping");
@@ -2074,14 +2061,6 @@ public:
 			DOS_SDA_SEG = 0xb2;		// dos swappable area
 			DOS_SDA_OFS = 0;
 			DOS_CDS_SEG = 0x108;
-			DOS_FIRST_SHELL = 0x118;
-			DOS_FIRST_SHELL_SIZE = 0x40;
-			DOS_FIRST_SHELL_END = DOS_MEM_START = 0x158;	 // regression to r3437 fixes nascar 2 colors
-
-			if (dosbox_shell_env_size != 0) {
-				LOG(LOG_MISC,LOG_WARN)("WARNING: Shell environment block size setting is only available when dynamic dos kernel allocation is enabled");
-				dosbox_shell_env_size = (DOS_FIRST_SHELL_END - (DOS_FIRST_SHELL+19)) << 4; /* see src/shell/shell.cpp line 722 for more information */
-			}
 
 			if (!private_segment_in_umb) {
 				/* If private segment is not being placed in UMB, then it must follow the DOS kernel. */
@@ -2111,7 +2090,6 @@ public:
 		LOG(LOG_MISC,LOG_DEBUG)("   constring:    seg 0x%04x",DOS_CONSTRING_SEG);
 		LOG(LOG_MISC,LOG_DEBUG)("   SDA:          seg 0x%04x:0x%04x",DOS_SDA_SEG,DOS_SDA_OFS);
 		LOG(LOG_MISC,LOG_DEBUG)("   CDS:          seg 0x%04x",DOS_CDS_SEG);
-		LOG(LOG_MISC,LOG_DEBUG)("   first shell:  seg 0x%04x-0x%04x",DOS_FIRST_SHELL,DOS_FIRST_SHELL_END-1);
 		LOG(LOG_MISC,LOG_DEBUG)("[private segment @ this point 0x%04x-0x%04x mem=0x%04lx]",
 			DOS_PRIVATE_SEGMENT,DOS_PRIVATE_SEGMENT_END,
 			(unsigned long)(MEM_TotalPages() << (12 - 4)));
@@ -2228,18 +2206,46 @@ public:
 			if (DOS_MEM_START < minimum_mcb_segment)
 				DOS_MEM_START = minimum_mcb_segment;
 		}
-		/* a lot of DOS games and demos have problems with an MCB starting at, say, 0x70 or 0x170. So just simulate MS-DOS 7.0 luck
-		 * and emulate a DOS kernel that consumes 20-30KB of memory to keep things from crashing a lot. A user who wants to push
-		 * their luck freeing more conventional memory is free to set "minimum mcb segment" to a lower value. */
-		else if (dynamic_dos_kernel_alloc && !mainline_compatible_mapping) {
-			if (DOS_MEM_START < 0x800)
-				DOS_MEM_START = 0x800;
-		}
 
 		LOG(LOG_MISC,LOG_DEBUG)("   mem start:    seg 0x%04x",DOS_MEM_START);
 
 		/* carry on setup */
 		DOS_SetupMemory();								/* Setup first MCB */
+		
+        if (minimum_mcb_free == 0)
+            minimum_mcb_free = 0x800;
+        else if (minimum_mcb_free < minimum_mcb_segment)
+            minimum_mcb_free = minimum_mcb_segment;
+
+        LOG(LOG_MISC,LOG_DEBUG)("   min free:     seg 0x%04x",minimum_mcb_free);
+
+        if (DOS_MEM_START < minimum_mcb_free) {
+            Bit16u sg=0,tmp;
+
+            dos.psp(8); // DOS ownership
+
+            tmp = 1; // start small
+            if (DOS_AllocateMemory(&sg,&tmp)) {
+                if (sg < minimum_mcb_free) {
+                    LOG(LOG_MISC,LOG_DEBUG)("   min free pad: seg 0x%04x",sg);
+                }
+                else {
+                    DOS_FreeMemory(sg);
+                    sg = 0;
+                }
+            }
+            else {
+                sg=0;
+            }
+
+            if (sg != 0 && sg < minimum_mcb_free) {
+                Bit16u tmp = minimum_mcb_free - sg;
+                if (!DOS_ResizeMemory(sg,&tmp)) {
+                    LOG(LOG_MISC,LOG_DEBUG)("    WARNING: cannot resize min free pad");
+                }
+            }
+        }
+
 		DOS_SetupPrograms();
 		DOS_SetupMisc();							/* Some additional dos interrupts */
 		DOS_SDA(DOS_SDA_SEG,DOS_SDA_OFS).SetDrive(25); /* Else the next call gives a warning. */
