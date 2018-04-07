@@ -3,6 +3,7 @@
 cd vs2015/sdl
 	
 make distclean
+rm sdl.pc
 
 cd ../../
 	
