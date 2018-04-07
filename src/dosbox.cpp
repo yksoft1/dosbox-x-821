@@ -1547,6 +1547,10 @@ void DOSBOX_SetupConfigSections(void) {
 			"MS-DOS and Windows 3.1 exception handlers. For preemptive multitasking OSes like Windows 95, set this option to true.\n"
 			"This option is not compatible with the dynamic core.");
 
+	Pbool = secprop->Add_bool("use dynamic core with paging on",Property::Changeable::Always,true);
+	Pbool->Set_help("Dynamic core is NOT compatible with the way page faults in the guest are handled in DosBox-X.\n"
+			"Windows 9x may crash with paging on if dynamic core is enabled.\n");
+			
 	Pbool = secprop->Add_bool("ignore opcode 63",Property::Changeable::Always,true);
 	Pbool->Set_help("When debugging, do not report illegal opcode 0x63.\n"
 			"Enable this option to ignore spurious errors while debugging from within Windows 3.1/9x/ME");

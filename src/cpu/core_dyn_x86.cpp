@@ -258,6 +258,8 @@ static void dyn_restoreregister(DynReg * src_reg, DynReg * dst_reg) {
 
 static bool paging_warning = true;
 
+bool use_dynamic_core_with_paging = true;
+
 Bits CPU_Core_Dyn_X86_Run(void) {
     /* Dynamic core is NOT compatible with the way page faults
      * in the guest are handled in this emulator. Do not use
@@ -268,14 +270,14 @@ Bits CPU_Core_Dyn_X86_Run(void) {
      * with the idea that it works. This code cannot handle
      * the sudden context switch of a page fault and it never
      * will. Don't do it. You have been warned. */
- /*   if (paging.enabled) {
+    if (paging.enabled && !use_dynamic_core_with_paging) {
         if (paging_warning) {
             LOG_MSG("Dynamic core warning: The guest OS/Application has just switched on 80386 paging, which is not supported by the dynamic core. The normal core will be used until paging is switched off again.");
             paging_warning = false;
         }
 
         return CPU_Core_Normal_Run();
-    }*/
+    }
 	
 	/* Determine the linear address of CS:EIP */
 restart_core:
