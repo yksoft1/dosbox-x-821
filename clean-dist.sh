@@ -3,7 +3,7 @@
 cd vs2015/sdl
 	
 make distclean
-rm dosbox.pc
+rm sdl.pc
 
 cd ../../
 	
