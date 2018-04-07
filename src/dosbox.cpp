@@ -2155,6 +2155,9 @@ void DOSBOX_SetupConfigSections(void) {
 
 	Pbool = secprop->Add_bool("dos in hma",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Report that DOS occupies HMA (equiv. DOS=HIGH)");
+	
+	Pint = secprop->Add_int("dos sda size",Property::Changeable::WhenIdle,0);
+	Pint->Set_help("SDA (swappable data area) size, in bytes. Set to 0 to use a reasonable default.");
 
 	Pint = secprop->Add_int("hma free space",Property::Changeable::WhenIdle,34*1024); /* default 34KB (TODO: How much does MS-DOS 5.0 usually occupy?) */
 	Pint->Set_help("Controls the amount of free space available in HMA. This setting is not meaningful unless the\n"
@@ -2197,17 +2200,23 @@ void DOSBOX_SetupConfigSections(void) {
 			"and demos to cause intermittent static noises when using Sound Blaster output. DOS programs\n"
 			"compressed with Microsoft EXEPACK will not run if the minimum MCB segment is below 64KB.");
 
-	Pbool = secprop->Add_bool("enable dummy device mcb",Property::Changeable::OnlyAtStart,true);
+	Phex = secprop->Add_hex("minimum mcb free", Property::Changeable::WhenIdle,0);
+	Phex->Set_help("Minimum free segment value to leave free. At startup, the DOS kernel will allocate memory\n"
+                   "up to this point. This can be used to deal with EXEPACK issues or DOS programs that cannot\n"
+                   "be loaded too low in memory. This differs from 'minimum mcb segment' in that this affects\n"
+                   "the lowest free block instead of the starting point of the mcb chain.");
+
+	Pbool = secprop->Add_bool("enable dummy device mcb",Property::Changeable::OnlyAtStart,false);
 	Pbool->Set_help("If set (default), allocate a fake device MCB at the base of conventional memory.\n"
 			"Clearing this option can reclaim a small amount of conventional memory at the expense of\n"
 			"some minor DOS compatibility.");
 
-	Pbool = secprop->Add_bool("enable loadfix padding",Property::Changeable::OnlyAtStart,true);
+	Pbool = secprop->Add_bool("enable loadfix padding",Property::Changeable::OnlyAtStart,false);
 	Pbool->Set_help("If set (default), allocate a small 1KB region at the base of conventional memory.\n"
 			"Clearing this option can reclaim a small amount of conventional memory, but can also\n"
 			"cause some DOS games to break especially if dynamic kernel allocation is enabled.");
 
-	Pbool = secprop->Add_bool("enable dummy environment block",Property::Changeable::OnlyAtStart,true);
+	Pbool = secprop->Add_bool("enable dummy environment block",Property::Changeable::OnlyAtStart,false);
 	Pbool->Set_help("If set (default), allocate a dummy environment block at the base of conventional memory.\n"
 			"You can clear this option to reclaim a small amount of conventional memory.");
 
