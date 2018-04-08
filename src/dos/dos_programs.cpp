@@ -2101,7 +2101,7 @@ static void INTRO_ProgramStart(Program * * make) {
 }
 
 bool ElTorito_ScanForBootRecord(CDROM_Interface *drv,unsigned long &boot_record,unsigned long &el_torito_base) {
-	char buffer[2048];
+	unsigned char buffer[2048];
 	unsigned int sec;
 
 	for (sec=16;sec < 32;sec++) {
@@ -2950,7 +2950,7 @@ private:
 		if (dsk == NULL) return NULL;
 		//formatting might fail; just log the failure and continue
 		Bit8u ret = dsk->Format();
-		if (ret != NULL) {
+		if (ret != 0) {
 			LOG_MSG("Warning: could not format ramdrive - error code %u\n", (unsigned int)ret);
 		}
 		return dsk;
@@ -3078,7 +3078,8 @@ private:
 	}
 
 	void AddToDriveManager(const char drive, DOS_Drive* imgDisk, const Bit8u mediaid) {
-		std::vector<DOS_Drive*> imgDisks = { imgDisk };
+		std::vector<DOS_Drive*> imgDisks;
+		imgDisks.push_back(imgDisk);
 		AddToDriveManager(drive, imgDisks, mediaid);
 	}
 
