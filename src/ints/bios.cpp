@@ -3625,6 +3625,8 @@ static void BIOS_Int10RightJustifiedPrint(const int x,int &y,const char *msg) {
 
 				mem_writew(0xA0000+bo,*s++);
 				mem_writeb(0xA2000+bo,0xE1);
+				
+				bo += 2; /* and keep the cursor following the text */
 			}
 
 			reg_eax = 0x1300; // set cursor pos (PC-98)
@@ -3654,6 +3656,7 @@ Bitu call_pnp_pp = 0;
 Bitu isapnp_biosstruct_base = 0;
 
 Bitu BIOS_boot_code_offset = 0;
+Bitu BIOS_bootfail_code_offset = 0;
 
 void BIOS_OnResetComplete(Section *x);
 
@@ -4724,6 +4727,18 @@ private:
 		return CBRET_NONE;
 	}
 	CALLBACK_HandlerObject cb_bios_boot;
+	CALLBACK_HandlerObject cb_bios_bootfail;
+	static Bitu cb_bios_bootfail__func(void) {
+        int x,y;
+
+        x = y = 0;
+
+        /* PC-98 MS-DOS boot sector may RETF back to the BIOS, and this is where execution ends up */
+		BIOS_Int10RightJustifiedPrint(x,y,"Guest OS failed to boot, returned failure");
+
+        /* and then after this call, there is a JMP $ to loop endlessly */
+        return CBRET_NONE;
+    }
 	static Bitu cb_bios_boot__func(void) {
 
 		/* Reset/power-on overrides the user's A20 gate preferences.
@@ -4949,7 +4964,8 @@ public:
 		cb_bios_adapter_rom_scan.Install(&cb_bios_adapter_rom_scan__func,CB_RETF,"BIOS Adapter ROM scan");
 		cb_bios_startup_screen.Install(&cb_bios_startup_screen__func,CB_RETF,"BIOS Startup screen");
 		cb_bios_boot.Install(&cb_bios_boot__func,CB_RETF,"BIOS BOOT");
-
+		cb_bios_bootfail.Install(&cb_bios_bootfail__func,CB_RETF,"BIOS BOOT FAIL");
+		
 		// Compatible POST routine location: jump to the callback
 		{
 			Bitu wo_fence;
@@ -4988,6 +5004,13 @@ public:
 			phys_writew(wo+0x02,(Bit16u)cb_bios_boot.Get_callback());			//The immediate word
 			wo += 4;
 
+			// boot fail
+			BIOS_bootfail_code_offset = wo;
+			phys_writeb(wo+0x00,(Bit8u)0xFE); //GRP 4
+			phys_writeb(wo+0x01,(Bit8u)0x38); //Extra Callback instruction
+			phys_writew(wo+0x02,(Bit16u)cb_bios_bootfail.Get_callback()); //The immediate word
+			wo += 4;
+		
 			/* fence */
 			phys_writeb(wo++,0xEB);								// JMP $-2
 			phys_writeb(wo++,0xFE);
