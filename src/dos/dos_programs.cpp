@@ -2956,7 +2956,7 @@ private:
 		if (dsk == NULL) return NULL;
 		//formatting might fail; just log the failure and continue
 		Bit8u ret = dsk->Format();
-		if (ret != NULL) {
+		if (ret != 0x00) {
 			LOG_MSG("Warning: could not format ramdrive - error code %u\n", (unsigned int)ret);
 		}
 		return dsk;
