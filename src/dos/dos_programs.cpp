@@ -530,6 +530,7 @@ static void SHOWGUI_ProgramStart(Program * * make) {
 
 extern Bit32u floppytype;
 extern bool dos_kernel_disabled;
+extern Bitu BIOS_bootfail_code_offset;
 
 void DisableINT33();
 void EMS_DoShutDown();
@@ -1028,6 +1029,11 @@ public:
                 reg_ebp = 0;
                 reg_eax = 0x30;
                 reg_edx = 0x1;
+				
+				/* PC-98 MS-DOS boot sector behavior suggests that the BIOS does a CALL FAR
+				 * to the boot sector, and the boot sector can RETF back to the BIOS on failure. */
+				CPU_Push16(BIOS_bootfail_code_offset >> 4); /* segment */
+				CPU_Push16(BIOS_bootfail_code_offset & 0xF); /* offset */
 
                 /* clear the text layer */
                 for (unsigned int i=0;i < (80*25*2);i += 2) {
