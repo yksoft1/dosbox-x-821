@@ -636,15 +636,9 @@ private:
 public:
    
 	void Run(void) {
-		bool force = false;
-
-		if (cmd->FindExist("-force",true))
-            force = true;
-
-        if (IS_PC98_ARCH && !force) {
-            WriteOut("Booting from PC-98 mode is not supported yet\n");
-            return;
-        }
+		if (cmd->FindExist("-force",true)) {	
+		//no longer needed
+		}
 		
 		//Hack To allow long commandlines
 		ChangeToLongCmd();
@@ -1051,7 +1045,7 @@ public:
 
 				imageDiskList[drive-65]->Get_Geometry(&heads,&cyls,&sects,&ssize);
 
-				Bitu disk_equip = 0,disk_equip_144 = 0;
+				Bitu disk_equip = 0,disk_equip_144 = 0,scsi_equip = 0;
 
 				 /* FIXME: MS-DOS appears to be able to see disk image B: but only
 				  * if the disk format is the same, for some reason.
@@ -1064,22 +1058,46 @@ public:
 						disk_equip |= (1 << i);
 						disk_equip_144 |= (1 << i);
 					}
-				}				
+				}		
+				
+                for (unsigned int i=0;i < 2;i++) {
+                    if (imageDiskList[i+2] != NULL) {
+                        scsi_equip |= (1 << i);
+
+                        Bitu m = 0x460 + (i * 4);
+
+                        mem_writeb(m+0,sects);
+                        mem_writeb(m+1,heads);
+                        mem_writew(m+2,(cyls & 0xFFF) + (ssize == 512 ? 0x1000 : 0) + (ssize == 1024 ? 0x2000 : 0) + 0x8000/*NP2:hwsec*/);
+                    }
+                }	
 				
 				if (ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) {
 					mem_writeb(0x584,0x90/*type*/ + (drive - 65)/*drive*/); /* 1.2MB 3-mode */
 					mem_writew(0x55C,disk_equip); /* disk equipment (drive 0 is present) */
 					mem_writew(0x5AE,disk_equip_144); /* disk equipment (drive 0 is present, 1.44MB) */
+					mem_writeb(0x482,scsi_equip);
 				}
 				else if (ssize == 512 && heads == 2 && cyls == 80 && sects == 18) {
 					mem_writeb(0x584,0x30/*type*/ + (drive - 65)/*drive*/); /* 1.44MB */
 					mem_writew(0x55C,disk_equip); /* disk equipment (drive 0 is present) */
 					mem_writew(0x5AE,disk_equip_144); /* disk equipment (drive 0 is present, 1.44MB) */
+					mem_writeb(0x482,scsi_equip);
 				}
 				/* TODO: 640KB? */
+				else if (drive >= 'C') {
+                    /* hard drive */
+                    mem_writeb(0x584,0xA0/*type*/ + (drive - 'C')/*drive*/);
+                    mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
+                    mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
+                    mem_writeb(0x482,scsi_equip);
+                }
 				else {
-					/* TODO: hard drive */
-					mem_writeb(0x584,0x00/*type*/ + 0x00/*drive*/);
+                    // FIXME
+                    mem_writeb(0x584,0x00);
+                    mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
+                    mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
+                    mem_writeb(0x482,scsi_equip);
 				}
             }
 			else {
@@ -3337,24 +3355,40 @@ private:
 				newImage = new imageDisk(newDisk, (Bit8u *)temp_line.c_str(), imagesize, (imagesize > 2880));
 			}
 		}
-
+		
+        /* sometimes imageDisk is able to determine geometry automatically (HDI images) */
+        if (newImage) {
+            if (newImage->sectors != 0 && newImage->heads != 0 && newImage->cylinders != 0 && newImage->sector_size != 0) {
+                /* prevent the code below from changing the geometry */
+                sizes[0] = newImage->sector_size;
+                sizes[1] = newImage->sectors;
+                sizes[2] = newImage->heads;
+                sizes[3] = newImage->cylinders;
+            }
+        }
+		
 		/* auto-fill: sector/track count */
 		if (sizes[1] == 0) sizes[1] = 63;
 		/* auto-fill: head/cylinder count */
 		if (sizes[3]/*cylinders*/ == 0 && sizes[2]/*heads*/ == 0) {
 			sizes[2] = 16; /* typical hard drive, unless a very old drive */
 			sizes[3]/*cylinders*/ = (Bitu)((Bit64u)sectors / (Bit64u)sizes[2]/*heads*/ / (Bit64u)sizes[1]/*sectors/track*/);
-
+			
+			if (IS_PC98_ARCH){ 
+				/* TODO: PC-98 has it's own 4096 cylinder limit */
+			}
+			else {
 			/* INT 13h mapping, deal with 1024-cyl limit */
-			while (sizes[3] > 1024) {
-				if (sizes[2] >= 255) break; /* nothing more we can do */
+				while (sizes[3] > 1024) {
+					if (sizes[2] >= 255) break; /* nothing more we can do */
 
-											/* try to generate head count 16, 32, 64, 128, 255 */
-				sizes[2]/*heads*/ *= 2;
-				if (sizes[2] >= 256) sizes[2] = 255;
+												/* try to generate head count 16, 32, 64, 128, 255 */
+					sizes[2]/*heads*/ *= 2;
+					if (sizes[2] >= 256) sizes[2] = 255;
 
-				/* and recompute cylinders */
-				sizes[3]/*cylinders*/ = (Bitu)((Bit64u)sectors / (Bit64u)sizes[2]/*heads*/ / (Bit64u)sizes[1]/*sectors/track*/);
+					/* and recompute cylinders */
+					sizes[3]/*cylinders*/ = (Bitu)((Bit64u)sectors / (Bit64u)sizes[2]/*heads*/ / (Bit64u)sizes[1]/*sectors/track*/);
+				}
 			}
 		}
 
