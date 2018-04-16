@@ -3379,17 +3379,22 @@ private:
 		if (sizes[3]/*cylinders*/ == 0 && sizes[2]/*heads*/ == 0) {
 			sizes[2] = 16; /* typical hard drive, unless a very old drive */
 			sizes[3]/*cylinders*/ = (Bitu)((Bit64u)sectors / (Bit64u)sizes[2]/*heads*/ / (Bit64u)sizes[1]/*sectors/track*/);
-
+			
+			if (IS_PC98_ARCH){ 
+				/* TODO: PC-98 has it's own 4096 cylinder limit */
+			}
+			else {
 			/* INT 13h mapping, deal with 1024-cyl limit */
-			while (sizes[3] > 1024) {
-				if (sizes[2] >= 255) break; /* nothing more we can do */
+				while (sizes[3] > 1024) {
+					if (sizes[2] >= 255) break; /* nothing more we can do */
 
-											/* try to generate head count 16, 32, 64, 128, 255 */
-				sizes[2]/*heads*/ *= 2;
-				if (sizes[2] >= 256) sizes[2] = 255;
+												/* try to generate head count 16, 32, 64, 128, 255 */
+					sizes[2]/*heads*/ *= 2;
+					if (sizes[2] >= 256) sizes[2] = 255;
 
-				/* and recompute cylinders */
-				sizes[3]/*cylinders*/ = (Bitu)((Bit64u)sectors / (Bit64u)sizes[2]/*heads*/ / (Bit64u)sizes[1]/*sectors/track*/);
+					/* and recompute cylinders */
+					sizes[3]/*cylinders*/ = (Bitu)((Bit64u)sectors / (Bit64u)sizes[2]/*heads*/ / (Bit64u)sizes[1]/*sectors/track*/);
+				}
 			}
 		}
 
