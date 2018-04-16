@@ -636,15 +636,9 @@ private:
 public:
    
 	void Run(void) {
-		bool force = false;
-
-		if (cmd->FindExist("-force",true))
-            force = true;
-
-        if (IS_PC98_ARCH && !force) {
-            WriteOut("Booting from PC-98 mode is not supported yet\n");
-            return;
-        }
+		if (cmd->FindExist("-force",true)) {	
+		//no longer needed
+		}
 		
 		//Hack To allow long commandlines
 		ChangeToLongCmd();
