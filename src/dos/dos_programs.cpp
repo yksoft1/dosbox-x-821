@@ -1051,7 +1051,7 @@ public:
 
 				imageDiskList[drive-65]->Get_Geometry(&heads,&cyls,&sects,&ssize);
 
-				Bitu disk_equip = 0,disk_equip_144 = 0;
+				Bitu disk_equip = 0,disk_equip_144 = 0,scsi_equip = 0;
 
 				 /* FIXME: MS-DOS appears to be able to see disk image B: but only
 				  * if the disk format is the same, for some reason.
@@ -1064,22 +1064,46 @@ public:
 						disk_equip |= (1 << i);
 						disk_equip_144 |= (1 << i);
 					}
-				}				
+				}		
+				
+                for (unsigned int i=0;i < 2;i++) {
+                    if (imageDiskList[i+2] != NULL) {
+                        scsi_equip |= (1 << i);
+
+                        Bitu m = 0x460 + (i * 4);
+
+                        mem_writeb(m+0,sects);
+                        mem_writeb(m+1,heads);
+                        mem_writew(m+2,(cyls & 0xFFF) + (ssize == 512 ? 0x1000 : 0) + (ssize == 1024 ? 0x2000 : 0) + 0x8000/*NP2:hwsec*/);
+                    }
+                }	
 				
 				if (ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) {
 					mem_writeb(0x584,0x90/*type*/ + (drive - 65)/*drive*/); /* 1.2MB 3-mode */
 					mem_writew(0x55C,disk_equip); /* disk equipment (drive 0 is present) */
 					mem_writew(0x5AE,disk_equip_144); /* disk equipment (drive 0 is present, 1.44MB) */
+					mem_writeb(0x482,scsi_equip);
 				}
 				else if (ssize == 512 && heads == 2 && cyls == 80 && sects == 18) {
 					mem_writeb(0x584,0x30/*type*/ + (drive - 65)/*drive*/); /* 1.44MB */
 					mem_writew(0x55C,disk_equip); /* disk equipment (drive 0 is present) */
 					mem_writew(0x5AE,disk_equip_144); /* disk equipment (drive 0 is present, 1.44MB) */
+					mem_writeb(0x482,scsi_equip);
 				}
 				/* TODO: 640KB? */
+				else if (drive >= 'C') {
+                    /* hard drive */
+                    mem_writeb(0x584,0xA0/*type*/ + (drive - 'C')/*drive*/);
+                    mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
+                    mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
+                    mem_writeb(0x482,scsi_equip);
+                }
 				else {
-					/* TODO: hard drive */
-					mem_writeb(0x584,0x00/*type*/ + 0x00/*drive*/);
+                    // FIXME
+                    mem_writeb(0x584,0x00);
+                    mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
+                    mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
+                    mem_writeb(0x482,scsi_equip);
 				}
             }
 			else {
@@ -2107,7 +2131,7 @@ static void INTRO_ProgramStart(Program * * make) {
 }
 
 bool ElTorito_ScanForBootRecord(CDROM_Interface *drv,unsigned long &boot_record,unsigned long &el_torito_base) {
-	char buffer[2048];
+	unsigned char buffer[2048];
 	unsigned int sec;
 
 	for (sec=16;sec < 32;sec++) {
@@ -3084,7 +3108,8 @@ private:
 	}
 
 	void AddToDriveManager(const char drive, DOS_Drive* imgDisk, const Bit8u mediaid) {
-		std::vector<DOS_Drive*> imgDisks = { imgDisk };
+		std::vector<DOS_Drive*> imgDisks;
+		imgDisks.push_back(imgDisk);
 		AddToDriveManager(drive, imgDisks, mediaid);
 	}
 
@@ -3336,7 +3361,18 @@ private:
 				newImage = new imageDisk(newDisk, (Bit8u *)temp_line.c_str(), imagesize, (imagesize > 2880));
 			}
 		}
-
+		
+        /* sometimes imageDisk is able to determine geometry automatically (HDI images) */
+        if (newImage) {
+            if (newImage->sectors != 0 && newImage->heads != 0 && newImage->cylinders != 0 && newImage->sector_size != 0) {
+                /* prevent the code below from changing the geometry */
+                sizes[0] = newImage->sector_size;
+                sizes[1] = newImage->sectors;
+                sizes[2] = newImage->heads;
+                sizes[3] = newImage->cylinders;
+            }
+        }
+		
 		/* auto-fill: sector/track count */
 		if (sizes[1] == 0) sizes[1] = 63;
 		/* auto-fill: head/cylinder count */
