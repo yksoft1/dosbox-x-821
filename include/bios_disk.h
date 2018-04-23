@@ -172,7 +172,7 @@ private:
 
 class imageDiskVHD : public imageDisk {
 public:
-	enum ErrorCodes : int
+	enum ErrorCodes
 	{
 		OPEN_SUCCESS = 0,
 		ERROR_OPENING = 1,
@@ -187,7 +187,7 @@ public:
 		PARENT_INVALID_MATCH = 0x14,
 		PARENT_INVALID_DATE = 0x15
 	};
-	enum VHDTypes : Bit32u
+	enum VHDTypes 
 	{
 		VHD_TYPE_NONE = 0,
 		VHD_TYPE_FIXED = 2,
