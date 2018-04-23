@@ -132,9 +132,16 @@ void incrementFDD(void) {
 	CMOS_SetRegister(0x14, (Bit8u)(equipment&0xff));
 }
 
+int swapInDisksSpecificDrive = -1;
+// -1 = swap across A: and B: (DOSBox / DOSBox-X default behavior)
+// 0 = swap across A: only
+// 1 = swap across B: only
+
 void swapInDisks(void) {
 	bool allNull = true;
 	Bits diskcount = 0;
+	Bits diskswapcount = 2;
+	Bits diskswapdrive = 0;
 	Bits swapPos = swapPosition;
 	int i;
 
@@ -148,20 +155,28 @@ void swapInDisks(void) {
 
 	/* No disks setup... fail */
 	if (allNull) return;
+	
+	/* if a specific drive is to be swapped, then adjust to focus on it */
+	if (swapInDisksSpecificDrive >= 0 && swapInDisksSpecificDrive <= 1) {
+		diskswapdrive = swapInDisksSpecificDrive;
+		diskswapcount = 1;
+	}
 
 	/* If only one disk is loaded, this loop will load the same disk in dive A and drive B */
-	while(diskcount<2) {
+	while(diskcount < diskswapcount) {
 		if(diskSwap[swapPos] != NULL) {
-			LOG_MSG("Loaded disk %d from swaplist position %d - \"%s\"", (int)diskcount, (int)swapPos, diskSwap[swapPos]->diskname.c_str());
+			LOG_MSG("Loaded drive %d disk %d from swaplist position %d - \"%s\"", (int)diskswapdrive, (int)diskcount, (int)swapPos, diskSwap[swapPos]->diskname.c_str());
 
-			if (imageDiskList[diskcount] != NULL)
-				imageDiskList[diskcount]->Release();
+			if (imageDiskList[diskswapdrive] != NULL)
+				imageDiskList[diskswapdrive]->Release();
 
-			imageDiskList[diskcount] = diskSwap[swapPos];
-			imageDiskList[diskcount]->Addref();
+			imageDiskList[diskswapdrive] = diskSwap[swapPos];
+			imageDiskList[diskswapdrive]->Addref();
 
 			diskcount++;
+			diskswapdrive++;
 		}
+		
 		swapPos++;
 		if(swapPos>=MAX_SWAPPABLE_DISKS) swapPos=0;
 	}
