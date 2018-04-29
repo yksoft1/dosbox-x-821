@@ -1292,6 +1292,27 @@ extern bool                         enable_pc98_egc;
 extern bool                         enable_pc98_grcg;
 extern bool                         enable_pc98_16color;
 extern bool							pc98_31khz_mode;
+extern bool							pc98_attr4_graphic;
+
+void pc98_update_text_layer_lineheight_from_bda(void) {
+	unsigned char c = mem_readb(0x53C);
+	unsigned char lineheight = mem_readb(0x53B) + 1;
+
+	pc98_gdc[GDC_MASTER].force_fifo_complete();
+	pc98_gdc[GDC_MASTER].row_height = lineheight;
+}
+
+void pc98_update_text_lineheight_from_bda(void) {
+	unsigned char c = mem_readb(0x53C);
+	unsigned char lineheight;
+
+	if (c & 0x01)/*20-line mode*/
+		lineheight = 20;
+	else /*25-line mode*/
+		lineheight = 16;
+
+	mem_writeb(0x53B,lineheight - 1);
+}
 
 static Bitu INT18_PC98_Handler(void) {
     Bit16u temp16;
@@ -1361,6 +1382,44 @@ static Bitu INT18_PC98_Handler(void) {
                 reg_bh = 0;
             }
             break;
+		case 0x0A: /* set CRT mode */
+			/* bit		off			on
+				0		25lines		20lines
+				1		80cols		40cols
+				2		v.lines		simp.graphics
+				3		K-CG access mode(not used in PC-98) */
+			
+			//TODO: set 25/20 lines mode and 80/40 columns mode.
+			//Attribute bit (bit 2)
+			pc98_attr4_graphic = !!(reg_al & 0x04);
+			
+			mem_writeb(0x53C,reg_al);
+			
+			if (reg_al & 2)
+				LOG_MSG("INT 18H AH=0Ah warning: 40-column PC-98 text mode not supported");
+			if (reg_al & 8)
+				LOG_MSG("INT 18H AH=0Ah warning: K-CG dot access mode not supported");
+
+			pc98_update_text_lineheight_from_bda();
+			pc98_update_text_layer_lineheight_from_bda();
+			
+			/* Apparently, this BIOS call also hides the cursor */
+			PC98_show_cursor(0);
+			break;
+		case 0x0B: /* get CRT mode */
+			/* bit		off			on
+				0		25lines		20lines
+				1		80cols		40cols
+				2		v.lines		simp.graphics
+				3		K-CG access mode(not used in PC-98) 
+				7		std CRT		hi-res CRT */
+				
+				/* NTS: I assume that real hardware doesn't offer a way to read back the state of these bits,
+				 * so the BIOS's only option is to read the mode byte back from the data area.
+				 * Neko Project II agrees. */
+				reg_al = mem_readb(0x53C);
+			
+			break;
         // TODO: "Edge" is using INT 18h AH=06h, what is that?
         //       Neko Project is also unaware of such a call.
         case 0x0C: /* text layer enable */
@@ -1477,6 +1536,7 @@ static Bitu INT18_PC98_Handler(void) {
         case 0x31: /* Return display mode and status */
             if (enable_pc98_egc) { /* FIXME: INT 18h AH=31/30h availability is tied to EGC enable */
                 unsigned char b597 = mem_readb(0x597);
+				unsigned char tstat = mem_readb(0x53C);
                 /* Return values:
                  *
                  * AL =
@@ -1510,7 +1570,11 @@ static Bitu INT18_PC98_Handler(void) {
                 reg_al =
                     ((pc98_31khz_mode ? 3 : 2) << 2)/*hsync*/;
                 reg_bh =
-                    ((b597 & 3) << 4)/*graphics video mode*/ + 1/*25 rows*/;
+                    ((b597 & 3) << 4)/*graphics video mode*/;
+				if (tstat & 0x10)
+					reg_bh |= 2;/*30 rows*/
+				else if ((tstat & 0x01) == 0)
+					reg_bh |= 1;/*25 rows*/
             }
             break;			
         /* From this point on the INT 18h call list appears to wander off from the keyboard into CRT/GDC/display management. */
@@ -4099,6 +4163,18 @@ private:
             /* number of scanlines per text row - 1 */
             mem_writeb(0x53B,0x0F); // CRT_RASTER, 640x400 24.83KHz-hsync 56.42Hz-vsync
 			
+			/* Text screen status.
+			 * Note that most of the bits are used verbatim in INT 18h AH=0Ah/AH=0Bh */
+			/* bit[7:7] = High resolution display 1=yes 0=no (standard)
+			 * bit[6:6] = vsync 1=VSYNC wait 0=end of vsync handling
+			 * bit[5:5] = unused
+			 * bit[4:4] = Number of lines 1=30 lines 0=20/25 lines
+			 * bit[3:3] = K-CG access mode 1=dot access 0=code access
+			 * bit[2:2] = Attribute mode (how to handle bit 4) 1=Simp. graphic 0=Vertical line
+			 * bit[1:1] = Number of columns 1=40 cols 0=80 cols
+			 * bit[0:0] = Number of lines 1=20/30 lines 0=25 lines */
+			 mem_writeb(0x53C,0x00);
+
             /* BIOS flags */
             /* bit[7:7] = Graphics display state                    1=Visible       0=Blanked (hidden)
              * bit[6:6] = CRT type                                  1=high res      0=standard
