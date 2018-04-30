@@ -93,16 +93,7 @@ imageDiskVHD::ErrorCodes imageDiskVHD::Open(const char* fileName, const bool rea
 			fclose(file);
 			return INVALID_DATA;
 		}
-		imageDisk* d = new imageDisk();
-		d->cylinders = footer.geometry.cylinders;
-		d->heads = footer.geometry.heads;
-		d->sectors = footer.geometry.sectors;
-		d->sector_size = 512;
-		d->diskSizeK = (Bit32u)(calcDiskSize / (Bit64u)1024); //impossible to overflow
-		d->diskimg = file;
-		d->hardDrive = true;
-		d->active = true;
-		*disk = d;
+		*disk = new imageDisk(file, fileName, footer.geometry.cylinders, footer.geometry.heads, footer.geometry.sectors, 512, true);
 		return OPEN_SUCCESS;
 	}
 
