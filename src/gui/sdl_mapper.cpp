@@ -49,6 +49,8 @@ void MAPPER_CheckKeyboardLayout();
 Bitu next_handler_xpos=0;
 Bitu next_handler_ypos=0;
 
+bool mapper_addhandler_create_buttons = false;
+
 bool isJPkeyboard = false;
 
 enum {
@@ -1854,6 +1856,10 @@ public:
 		);
 	}
 #endif
+    void notifybutton(CTextButton *n) {
+        notify_button = n;
+    }
+    CTextButton *notify_button;
 protected:
 	MapKeys defkey;
 	Bitu defmod;
@@ -2331,19 +2337,20 @@ static void CreateLayout(void) {
 	bind_but.mod3=new CCheckButton(20,454,60,20, "mod3",BC_Mod3);
 	bind_but.hold=new CCheckButton(100,410,60,20,"hold",BC_Hold);
 
-	bind_but.next=new CBindButton(250,400,50,20,"Next",BB_Next);
+	bind_but.add=new CBindButton(20,384,50,20,"Add",BB_Add);
+	bind_but.del=new CBindButton(70,384,50,20,"Del",BB_Del);
+	bind_but.next=new CBindButton(120,384,50,20,"Next",BB_Next);
 
-	bind_but.add=new CBindButton(250,380,50,20,"Add",BB_Add);
-	bind_but.del=new CBindButton(300,380,50,20,"Del",BB_Del);
+	bind_but.save=new CBindButton(180,440,50,20,"Save",BB_Save);
+	bind_but.exit=new CBindButton(230,440,50,20,"Exit",BB_Exit);
+	bind_but.cap=new CBindButton(280,440,50,20,"Capt",BB_Capture);
 
-	bind_but.save=new CBindButton(400,440,50,20,"Save",BB_Save);
-	bind_but.exit=new CBindButton(450,440,50,20,"Exit",BB_Exit);
-	bind_but.cap=new CBindButton(500,440,50,20,"Capt",BB_Capture);
-
-	bind_but.dbg=new CCaptionButton(300,460,340,20); // right below the Save button
+	bind_but.dbg = new CCaptionButton(180, 462, 460, 20); // right below the Save button
 	bind_but.dbg->Change("(event debug)");
 
 	bind_but.bind_title->Change("Bind Title");
+	
+	mapper_addhandler_create_buttons = true;
 }
 
 static SDL_Color map_pal[5]={
@@ -2608,38 +2615,44 @@ void MAPPER_AddHandler(MAPPER_Handler * handler,MapKeys key,Bitu mods,char const
 	strcat(tempname,eventname);
 	CHandlerEvent *event = new CHandlerEvent(tempname,handler,key,mods,buttonname);
 
-    // and a button in the mapper UI
-    {
-		new CEventButton(PX(next_handler_xpos*3),PY(next_handler_ypos),BW*3,BH,buttonname,event);
-		next_handler_xpos++;
-		if (next_handler_xpos>6) {
-			next_handler_xpos=3;next_handler_ypos++;
+	if (mapper_addhandler_create_buttons) {
+		// and a button in the mapper UI
+		{
+            unsigned int columns = ((unsigned int)strlen(buttonname) + 9U) / 10U;
+            if ((next_handler_xpos+columns-1)>6) {
+                next_handler_xpos=3;next_handler_ypos++;
+            }
+            CEventButton *button=new CEventButton(PX(next_handler_xpos*3),PY(next_handler_ypos),BW*3*columns,BH,buttonname,event);
+            event->notifybutton(button);
+            next_handler_xpos += columns;
+            if (next_handler_xpos>6) {
+                next_handler_xpos=3;next_handler_ypos++;
+            }
 		}
-    }
 
-    // this event may have appeared in the user's mapper file, and been ignored.
-    // now is the time to register it.
-    {
-        std::map<std::string,std::string>::iterator i = pending_string_binds.find(tempname);
-        char tmp[512];
+		// this event may have appeared in the user's mapper file, and been ignored.
+		// now is the time to register it.
+		{
+			std::map<std::string,std::string>::iterator i = pending_string_binds.find(tempname);
+			char tmp[512];
 
-        if (i != pending_string_binds.end()) {
-            LOG(LOG_MISC,LOG_WARN)("Found pending event for %s from user's file, applying now",tempname);
+			if (i != pending_string_binds.end()) {
+				LOG(LOG_MISC,LOG_WARN)("Found pending event for %s from user's file, applying now",tempname);
 
-            snprintf(tmp,sizeof(tmp),"%s %s",tempname,i->second.c_str());
+				snprintf(tmp,sizeof(tmp),"%s %s",tempname,i->second.c_str());
 
-            CreateStringBind(tmp);
+				CreateStringBind(tmp);
 
-            pending_string_binds.erase(i);
-        }
-        else {
-            /* use default binding.
-             * redundant? Yes! But, apparently necessary. */
-            event->MakeDefaultBind(tmp);
-            CreateStringBind(tmp);
-        }
-    }
-
+				pending_string_binds.erase(i);
+			}
+			else {
+				/* use default binding.
+				 * redundant? Yes! But, apparently necessary. */
+				event->MakeDefaultBind(tmp);
+				CreateStringBind(tmp);
+			}
+		}
+	}
 	return ;
 }
 
