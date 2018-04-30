@@ -50,11 +50,14 @@ imageDiskVHD::ErrorCodes imageDiskVHD::Open(const char* fileName, const bool rea
 }
 
 imageDiskVHD::ErrorCodes imageDiskVHD::Open(const char* fileName, const bool readOnly, imageDisk** disk, const Bit8u* matchUniqueId) {
+	//validate input parameters
+	if (fileName == NULL) return ERROR_OPENING;
+	if (disk == NULL) return ERROR_OPENING;
 	//verify that C++ didn't add padding to the structure layout
 	assert(sizeof(VHDFooter) == 512);
 	assert(sizeof(DynamicHeader) == 1024);
 	//open file and clear C++ buffering
-	FILE* file = fopen64(fileName, readOnly ? "r" : "rb+");
+	FILE* file = fopen64(fileName, readOnly ? "rb" : "rb+");
 	if (!file) return ERROR_OPENING;
 	setbuf(file, NULL);
 	//check that length of file is > 512 bytes
@@ -93,16 +96,7 @@ imageDiskVHD::ErrorCodes imageDiskVHD::Open(const char* fileName, const bool rea
 			fclose(file);
 			return INVALID_DATA;
 		}
-		imageDisk* d = new imageDisk();
-		d->cylinders = footer.geometry.cylinders;
-		d->heads = footer.geometry.heads;
-		d->sectors = footer.geometry.sectors;
-		d->sector_size = 512;
-		d->diskSizeK = (Bit32u)(calcDiskSize / (Bit64u)1024); //impossible to overflow
-		d->diskimg = file;
-		d->hardDrive = true;
-		d->active = true;
-		*disk = d;
+		*disk = new imageDisk(file, fileName, footer.geometry.cylinders, footer.geometry.heads, footer.geometry.sectors, 512, true);
 		return OPEN_SUCCESS;
 	}
 
@@ -118,6 +112,7 @@ imageDiskVHD::ErrorCodes imageDiskVHD::Open(const char* fileName, const bool rea
 	vhd->sector_size = 512;
 	vhd->diskSizeK = (Bit32u)(calcDiskSize / (Bit64u)1024); //impossible to overflow
 	vhd->diskimg = file;
+	vhd->diskname = fileName;
 	vhd->hardDrive = true;
 	vhd->active = true;
 	//use delete vhd from now on to release the disk image upon failure
@@ -140,11 +135,6 @@ imageDiskVHD::ErrorCodes imageDiskVHD::Open(const char* fileName, const bool rea
 	//if differencing, try to open parent
 	if (footer.diskType == VHD_TYPE_DIFFERENCING) {
 
-		//todo: remove these lines of code to enable diffencing drives (must implement TryOpenParent to be effective)
-		LOG_MSG("Differential VHD drives not implemented.\n");
-		delete vhd;
-		return UNSUPPORTED_TYPE;
-
 		//loop through each reference and try to find one we can open
 		for (int i = 0; i < 8; i++) {
 			//ignore entries with platform code 'none'
@@ -163,7 +153,10 @@ imageDiskVHD::ErrorCodes imageDiskVHD::Open(const char* fileName, const bool rea
 				}
 				ErrorCodes ret = TryOpenParent(fileName, dynHeader.parentLocatorEntry[i], buffer, buffer ? dataLength : 0, &(vhd->parentDisk), dynHeader.parentUniqueId);
 				if (buffer) free(buffer);
-				if (vhd->parentDisk) break; //success
+				if (vhd->parentDisk) { //if successfully opened
+					vhd->parentDisk->Addref();
+					break;
+				}
 				if (ret != ERROR_OPENING) {
 					delete vhd;
 					return (ErrorCodes)(ret | PARENT_ERROR);
@@ -205,21 +198,96 @@ imageDiskVHD::ErrorCodes imageDiskVHD::Open(const char* fileName, const bool rea
 	return OPEN_SUCCESS;
 }
 
-imageDiskVHD::ErrorCodes imageDiskVHD::TryOpenParent(const char* childFileName, const imageDiskVHD::ParentLocatorEntry &entry, Bit8u* data, const Bit32u dataLength, imageDisk** disk, const char* uniqueId) {
+int iso8859_1_encode(int utf32code) {
+	return ((utf32code >= 32 && utf32code <= 126) || (utf32code >= 160 && utf32code <= 255)) ? utf32code : -1;
+}
+
+//this function (1) converts data from UTF-16 to a native string for fopen (depending on the host OS), and (2) converts slashes, if necessary
+bool imageDiskVHD::convert_UTF16_for_fopen(std::string &string, const void* data, const Bit32u dataLength) {
+	//note: data is UTF-16 and always little-endian, with no null terminator
+	//dataLength is not the number of characters, but the number of bytes
+
+	string.reserve((size_t)(string.size() + (dataLength / 2) + 10)); //allocate a few extra bytes
+	char* indata = (char*)data;
+	char* lastchar = indata + dataLength;
+	int utf32code = 0;
+#if defined (WIN32) || defined(OS2)
+	int iso8859_1code = 0;
+#else
+	char temp[10];
+	char* tempout;
+	char* tempout2;
+	char* tempoutmax = &temp[10];
+#endif
+	while (indata < lastchar) {
+		//decode the character
+		utf32code = utf16le_decode((const char**)&indata, lastchar);
+		if (utf32code < 0) return false;
+#if defined (WIN32) || defined(OS2)
+		//MSDN docs define fopen to accept strings in the windows default code page, which is typically Windows-1252
+		//convert unicode string to ISO-8859, which is a subset of Windows-1252, and a lot easier to implement
+		iso8859_1code = iso8859_1_encode(utf32code);
+		if (iso8859_1code < 0) return false;
+		//and note that backslashes stay as backslashes on windows
+		string += (char)iso8859_1code;
+#else
+		//backslashes become slashes on Linux
+		if (utf32code == '\\') utf32code = '/';
+		//Linux ext3 filenames are byte strings, typically in UTF-8
+		//encode the character to a temporary buffer
+		tempout = temp;
+		if (utf8_encode(&tempout, tempoutmax, utf32code) < 0) return false;
+		//and append the byte(s) to the string
+		tempout2 = temp;
+		while (tempout2 < tempout) string += *tempout2++;
+#endif
+	}
+	return true;
+}
+
+imageDiskVHD::ErrorCodes imageDiskVHD::TryOpenParent(const char* childFileName, const imageDiskVHD::ParentLocatorEntry &entry, Bit8u* data, const Bit32u dataLength, imageDisk** disk, const Bit8u* uniqueId) {
+	std::string str = "";
+	const char* slashpos = NULL;
+
 	switch (entry.platformCode) {
 	case 0x57327275:
 		//Unicode relative pathname (UTF-16) on Windows
 
-		//todo: convert string to ASCII and append null  (or modify code to use wide chars)
-		//todo: consider existing file path, and create relative path
-		//return imageDiskVHD::Open(newFileName, true, disk, uniqueId);
-		break;
+#if defined (WIN32) || defined(OS2)
+		/* Windows */
+		slashpos = strrchr(childFileName, '\\');
+#else
+		/* Linux */
+		slashpos = strrchr(childFileName, '/');
+#endif
+		if (slashpos != NULL) {
+			//copy all characters up to and including the slash, to str
+			for (char* pos = (char*)childFileName; pos <= slashpos; pos++) {
+				str += *pos;
+			}
+		}
+
+		//convert byte order, and UTF-16 to ASCII, and change backslashes to slashes if on Linux
+		if (!convert_UTF16_for_fopen(str, data, dataLength)) break;
+
+		return imageDiskVHD::Open(str.c_str(), true, disk, uniqueId);
+
 	case 0x57326B75:
 		//Unicode absolute pathname (UTF-16) on Windows
-		
-		//todo: convert string to ASCII and append null
-		//return imageDiskVHD::Open(newFileName, true, disk, uniqueId);
+
+#if defined (WIN32) || defined(OS2)
+		/* nothing */
+#else
+		// Linux
+		// Todo: convert absolute pathname to something applicable for Linux
 		break;
+#endif
+
+		//convert byte order, and UTF-16 to ASCII, and change backslashes to slashes if on Linux
+		if (!convert_UTF16_for_fopen(str, data, dataLength)) break;
+
+		return imageDiskVHD::Open(str.c_str(), true, disk, uniqueId);
+
 	case 0x4D616320:
 		//Mac OS alias stored as blob
 		break;
@@ -321,6 +389,7 @@ imageDiskVHD::VHDTypes imageDiskVHD::GetVHDType(const char* fileName) {
 
 bool imageDiskVHD::loadBlock(const Bit32u blockNumber) {
 	if (currentBlock == blockNumber) return true;
+	if (blockNumber >= dynamicHeader.maxTableEntries) return false;
 	if (fseeko64(diskimg, dynamicHeader.tableOffset + (blockNumber * 4), SEEK_SET)) return false;
 	Bit32u blockSectorOffset;
 	if (fread(&blockSectorOffset, sizeof(Bit8u), 4, diskimg) != 4) return false;

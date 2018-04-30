@@ -754,7 +754,7 @@ static Bitu IRQ1_Handler_PC98(void) {
             case 0x0A: // 0
                 if (pressed) {
                     if (flags1 & 3) /* shift */
-                        add_key(scan_add + '(');
+                        add_key(scan_add + ')');
                     else
                         add_key(scan_add + '0');
                 }
@@ -873,7 +873,22 @@ static Bitu IRQ1_Handler_PC98(void) {
                         add_key(scan_add + 'p');
                 }
                 break;
-
+			case 0x1A: // @ @ ~ 
+				if (pressed) {
+					if (flags1 & 3) /* shift */
+						add_key(scan_add + '~');
+					else
+						add_key(scan_add + '@');
+				}
+				break;
+			case 0x1B: // [ [ { 
+				if (pressed) {
+					if (flags1 & 3) /* shift */
+						add_key(scan_add + '{');
+					else
+						add_key(scan_add + '[');
+				}
+				break;
             case 0x1C: // Enter
                 if (pressed) {
                     add_key(scan_add + 13);
@@ -959,7 +974,22 @@ static Bitu IRQ1_Handler_PC98(void) {
                         add_key(scan_add + ';');
                 }
                 break;
-
+			case 0x27: // : : * --- е▒
+				if (pressed) {
+					if (flags1 & 3) /* shift */
+						add_key(scan_add + '*');
+					else
+						add_key(scan_add + ':');
+				}
+				break;
+			case 0x28: // ] ] } --- ер ?
+				if (pressed) {
+					if (flags1 & 3) /* shift */
+						add_key(scan_add + '}');
+					else
+						add_key(scan_add + ']');
+				}
+				break;
             case 0x29: // Z
                 if (pressed) {
                     if (flags1 & 3) /* shift */
@@ -1073,7 +1103,13 @@ static Bitu IRQ1_Handler_PC98(void) {
                 flags1 &= ~3; // emulate AT BIOS l+r shift with PC-98 shift
                 flags1 |= pressed ? 3 : 0;
                 break;
-				
+	
+			case 0x71: // caps. do nothing
+				break;
+
+			case 0x72: // kana. do nothing
+				break;
+
             case 0x74: // left/right ctrl
                 flags1 &= ~4; // emulate AT BIOS l+r ctrl with PC-98 ctrl
                 flags1 |= pressed ? 4 : 0;

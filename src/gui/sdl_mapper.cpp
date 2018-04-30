@@ -2021,6 +2021,14 @@ static KeyBlock combo_1[14]={
 	{"=+","equals",KBD_equals},	{"\x1B","bspace",KBD_backspace},
 };
 
+static KeyBlock combo_1_pc98[14]={
+	{"`~","grave",KBD_grave}, {"1!","1",KBD_1}, {"2\"","2",KBD_2},
+	{"3#","3",KBD_3}, {"4$","4",KBD_4}, {"5%","5",KBD_5},
+	{"6&","6",KBD_6}, {"7'","7",KBD_7}, {"8(","8",KBD_8},
+	{"9)","9",KBD_9}, {"0","0",KBD_0}, {"-=","minus",KBD_minus},
+	{"=+","equals",KBD_equals}, {"\x1B","bspace",KBD_backspace},
+};
+
 static KeyBlock combo_2[12]={
 	{"q","q",KBD_q},			{"w","w",KBD_w},	{"e","e",KBD_e},
 	{"r","r",KBD_r},			{"t","t",KBD_t},	{"y","y",KBD_y},
@@ -2035,6 +2043,14 @@ static KeyBlock combo_3[12]={
 	{"j","j",KBD_j},			{"k","k",KBD_k},	{"l","l",KBD_l},
 	{";","semicolon",KBD_semicolon},				{"'","quote",KBD_quote},
 	{"\\","backslash",KBD_backslash},	
+};
+
+static KeyBlock combo_3_pc98[12]={
+	{"a","a",KBD_a}, {"s","s",KBD_s}, {"d","d",KBD_d},
+	{"f","f",KBD_f}, {"g","g",KBD_g}, {"h","h",KBD_h},
+	{"j","j",KBD_j}, {"k","k",KBD_k}, {"l","l",KBD_l},
+	{";+","semicolon",KBD_semicolon}, {"'","quote",KBD_quote},
+	{"\\","backslash",KBD_backslash},
 };
 
 static KeyBlock combo_4[11]={
@@ -2058,16 +2074,25 @@ static void CreateLayout(void) {
 #define PY(_Y_) (10+(_Y_)*BH)
 	AddKeyButtonEvent(PX(0),PY(0),BW,BH,"ESC","esc",KBD_esc);
 	for (i=0;i<12;i++) AddKeyButtonEvent(PX(2+i),PY(0),BW,BH,combo_f[i].title,combo_f[i].entry,combo_f[i].key);
-	for (i=0;i<14;i++) AddKeyButtonEvent(PX(  i),PY(1),BW,BH,combo_1[i].title,combo_1[i].entry,combo_1[i].key);
-
+	if (IS_PC98_ARCH) {
+		for (i=0;i<14;i++) AddKeyButtonEvent(PX( i),PY(1),BW,BH,combo_1_pc98[i].title,combo_1_pc98[i].entry,combo_1_pc98[i].key);
+	}
+	else {
+		for (i=0;i<14;i++) AddKeyButtonEvent(PX( i),PY(1),BW,BH,combo_1[i].title,combo_1[i].entry,combo_1[i].key);
+	}
 	AddKeyButtonEvent(PX(0),PY(2),BW*2,BH,"TAB","tab",KBD_tab);
 	for (i=0;i<12;i++) AddKeyButtonEvent(PX(2+i),PY(2),BW,BH,combo_2[i].title,combo_2[i].entry,combo_2[i].key);
 
 	AddKeyButtonEvent(PX(14),PY(2),BW*2,BH*2,"ENTER","enter",KBD_enter);
 	
 	caps_lock_event=AddKeyButtonEvent(PX(0),PY(3),BW*2,BH,"CLCK","capslock",KBD_capslock);
-	for (i=0;i<12;i++) AddKeyButtonEvent(PX(2+i),PY(3),BW,BH,combo_3[i].title,combo_3[i].entry,combo_3[i].key);
-
+	
+	if (IS_PC98_ARCH) {
+		for (i=0;i<12;i++) AddKeyButtonEvent(PX(2+i),PY(3),BW,BH,combo_3_pc98[i].title,combo_3_pc98[i].entry,combo_3_pc98[i].key);
+	}
+	else {
+		for (i=0;i<12;i++) AddKeyButtonEvent(PX(2+i),PY(3),BW,BH,combo_3[i].title,combo_3[i].entry,combo_3[i].key);
+	}
 	AddKeyButtonEvent(PX(0),PY(4),BW*2,BH,"SHIFT","lshift",KBD_leftshift);
 	for (i=0;i<11;i++) AddKeyButtonEvent(PX(2+i),PY(4),BW,BH,combo_4[i].title,combo_4[i].entry,combo_4[i].key);
 	AddKeyButtonEvent(PX(13),PY(4),BW*3,BH,"SHIFT","rshift",KBD_rightshift);
@@ -2120,25 +2145,51 @@ static void CreateLayout(void) {
 	AddKeyButtonEvent(PX(XO+1),PY(YO+3),BW,BH,"2","kp_2",KBD_kp2);
 	AddKeyButtonEvent(PX(XO+2),PY(YO+3),BW,BH,"3","kp_3",KBD_kp3);
 	AddKeyButtonEvent(PX(XO+3),PY(YO+3),BW,BH*2,"ENT","kp_enter",KBD_kpenter);
-	AddKeyButtonEvent(PX(XO),PY(YO+4),BW*2,BH,"0","kp_0",KBD_kp0);
+	if (IS_PC98_ARCH) {
+		AddKeyButtonEvent(PX(XO+0),PY(YO+4),BW*1,BH,"0","kp_0",KBD_kp0);
+		AddKeyButtonEvent(PX(XO+1),PY(YO+4),BW*1,BH,",","kp_comma",KBD_kpcomma);
+	}
+	else {
+		AddKeyButtonEvent(PX(XO+0),PY(YO+4),BW*2,BH,"0","kp_0",KBD_kp0);
+	}
 	AddKeyButtonEvent(PX(XO+2),PY(YO+4),BW,BH,".","kp_period",KBD_kpperiod);
 #undef XO
 #undef YO
 #define XO 5
 #define YO 7
-	/* F13-F24 block */
-	AddKeyButtonEvent(PX(XO+0),PY(YO+0),BW,BH,"F13","f13",KBD_f13);
-	AddKeyButtonEvent(PX(XO+1),PY(YO+0),BW,BH,"F14","f14",KBD_f14);
-	AddKeyButtonEvent(PX(XO+2),PY(YO+0),BW,BH,"F15","f15",KBD_f15);
-	AddKeyButtonEvent(PX(XO+3),PY(YO+0),BW,BH,"F16","f16",KBD_f16);
-	AddKeyButtonEvent(PX(XO+0),PY(YO+1),BW,BH,"F17","f17",KBD_f17);
-	AddKeyButtonEvent(PX(XO+1),PY(YO+1),BW,BH,"F18","f18",KBD_f18);
-	AddKeyButtonEvent(PX(XO+2),PY(YO+1),BW,BH,"F19","f19",KBD_f19);
-	AddKeyButtonEvent(PX(XO+3),PY(YO+1),BW,BH,"F20","f20",KBD_f20);
-	AddKeyButtonEvent(PX(XO+0),PY(YO+2),BW,BH,"F21","f21",KBD_f21);
-	AddKeyButtonEvent(PX(XO+1),PY(YO+2),BW,BH,"F22","f22",KBD_f22);
-	AddKeyButtonEvent(PX(XO+2),PY(YO+2),BW,BH,"F23","f23",KBD_f23);
-	AddKeyButtonEvent(PX(XO+3),PY(YO+2),BW,BH,"F24","f24",KBD_f24);
+    if (IS_PC98_ARCH) {
+        /* PC-98 extra keys */
+        AddKeyButtonEvent(PX(XO+0),PY(YO+0),BW*2,BH,"STOP","stop",KBD_stop);
+        AddKeyButtonEvent(PX(XO+2),PY(YO+0),BW*2,BH,"HELP","help",KBD_help);
+
+        AddKeyButtonEvent(PX(XO+0),PY(YO+1),BW*2,BH,"COPY","copy",KBD_copy);
+        AddKeyButtonEvent(PX(XO+2),PY(YO+1),BW*2,BH,"KANA","kana",KBD_kana);
+
+        AddKeyButtonEvent(PX(XO+0),PY(YO+2),BW*2,BH,"NFER","nfer",KBD_nfer);
+        AddKeyButtonEvent(PX(XO+2),PY(YO+2),BW*2,BH,"XFER","xfer",KBD_xfer);
+
+        AddKeyButtonEvent(PX(XO+0),PY(YO+3),BW*1,BH,"VF1","vf1",KBD_vf1);
+        AddKeyButtonEvent(PX(XO+1),PY(YO+3),BW*1,BH,"VF2","vf2",KBD_vf2);
+        AddKeyButtonEvent(PX(XO+2),PY(YO+3),BW*1,BH,"VF3","vf3",KBD_vf3);
+        AddKeyButtonEvent(PX(XO+0),PY(YO+4),BW*1,BH,"VF4","vf4",KBD_vf4);
+        AddKeyButtonEvent(PX(XO+1),PY(YO+4),BW*1,BH,"VF5","vf5",KBD_vf5);
+        AddKeyButtonEvent(PX(XO+2),PY(YO+4),BW*1,BH,"Ro","jp_ro",KBD_jp_ro);
+    }
+    else {
+		/* F13-F24 block */
+		AddKeyButtonEvent(PX(XO+0),PY(YO+0),BW,BH,"F13","f13",KBD_f13);
+		AddKeyButtonEvent(PX(XO+1),PY(YO+0),BW,BH,"F14","f14",KBD_f14);
+		AddKeyButtonEvent(PX(XO+2),PY(YO+0),BW,BH,"F15","f15",KBD_f15);
+		AddKeyButtonEvent(PX(XO+3),PY(YO+0),BW,BH,"F16","f16",KBD_f16);
+		AddKeyButtonEvent(PX(XO+0),PY(YO+1),BW,BH,"F17","f17",KBD_f17);
+		AddKeyButtonEvent(PX(XO+1),PY(YO+1),BW,BH,"F18","f18",KBD_f18);
+		AddKeyButtonEvent(PX(XO+2),PY(YO+1),BW,BH,"F19","f19",KBD_f19);
+		AddKeyButtonEvent(PX(XO+3),PY(YO+1),BW,BH,"F20","f20",KBD_f20);
+		AddKeyButtonEvent(PX(XO+0),PY(YO+2),BW,BH,"F21","f21",KBD_f21);
+		AddKeyButtonEvent(PX(XO+1),PY(YO+2),BW,BH,"F22","f22",KBD_f22);
+		AddKeyButtonEvent(PX(XO+2),PY(YO+2),BW,BH,"F23","f23",KBD_f23);
+		AddKeyButtonEvent(PX(XO+3),PY(YO+2),BW,BH,"F24","f24",KBD_f24);
+	}
 #undef XO
 #undef YO
 #define XO 0
@@ -2150,6 +2201,9 @@ static void CreateLayout(void) {
 	AddKeyButtonEvent(PX(XO+3),PY(YO+0),BW*3,BH,"HIRAGANA","jp_hiragana",KBD_jp_hiragana);
 	AddKeyButtonEvent(PX(XO+6),PY(YO+0),BW*1,BH,"YEN",     "jp_yen",     KBD_jp_yen);
 	AddKeyButtonEvent(PX(XO+6),PY(YO+1),BW*1,BH,"\\",      "jp_bckslash",KBD_jp_backslash);
+	AddKeyButtonEvent(PX(XO+6),PY(YO+2),BW*1,BH,":*",      "colon",      KBD_colon);
+	AddKeyButtonEvent(PX(XO+7),PY(YO+0),BW*1,BH,"^`",      "caret",      KBD_caret);
+    AddKeyButtonEvent(PX(XO+7),PY(YO+1),BW*1,BH,"@~",      "atsign",     KBD_atsign);
 	/* Korean */
 	AddKeyButtonEvent(PX(XO+3),PY(YO+1),BW*3,BH,"HANCHA",  "kor_hancha", KBD_kor_hancha);
 	AddKeyButtonEvent(PX(XO+3),PY(YO+2),BW*3,BH,"HANYONG", "kor_hanyong",KBD_kor_hanyong);
@@ -2475,6 +2529,9 @@ static struct {
 	{"jp_muhenkan", SDLK_WORLD_13 },
 	{"jp_henkan", SDLK_WORLD_14 },
 	{"jp_hiragana", SDLK_WORLD_15 },
+	{"colon", SDLK_COLON },
+	{"caret", SDLK_CARET },
+	{"atsign", SDLK_AT },
 #endif
 
 	{0,0}
