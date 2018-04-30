@@ -878,7 +878,7 @@ static Bitu IRQ1_Handler_PC98(void) {
 					if (flags1 & 3) /* shift */
 						add_key(scan_add + '~');
 					else
-						add_key(scan_add + '@');
+						add_key(scan_add + '`');
 				}
 				break;
 			case 0x1B: // [ [ { 
@@ -977,9 +977,9 @@ static Bitu IRQ1_Handler_PC98(void) {
 			case 0x27: // : : * --- е▒
 				if (pressed) {
 					if (flags1 & 3) /* shift */
-						add_key(scan_add + '*');
+						add_key(scan_add + '\"');
 					else
-						add_key(scan_add + ':');
+						add_key(scan_add + '\'');
 				}
 				break;
 			case 0x28: // ] ] } --- ер ?
