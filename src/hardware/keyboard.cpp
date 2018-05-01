@@ -1189,6 +1189,7 @@ void pc98_caps_toggle(void);
 void pc98_kana_toggle(void);
 void pc98_numlock_toggle(void);
 void pc98_keyboard_send(const unsigned char b);
+bool pc98_force_ibm_layout = false;
 
 /* this version sends to the PC-98 8251 emulation NOT the AT 8042 emulation */
 void KEYBOARD_PC98_AddKey(KBD_KEYS keytype,bool pressed) {
@@ -1225,7 +1226,6 @@ void KEYBOARD_PC98_AddKey(KBD_KEYS keytype,bool pressed) {
     case KBD_o:             ret=0x18;break;     // o  O  ラ
     case KBD_p:             ret=0x19;break;     // p  P  セ
 	case KBD_atsign: 		ret=0x1A;break; 	// @ ~ 
-	case KBD_grave:			ret=0x1A;break; 	// @ ~ 		US keyboard hack
     case KBD_leftbracket:   ret=0x1B;break;     // [  {  
     case KBD_enter:         ret=0x1C;break;     // ENTER/RETURN
     case KBD_kpenter:       ret=0x1C;break;     // ENTER/RETURN (KEYPAD)
@@ -1306,7 +1306,11 @@ void KEYBOARD_PC98_AddKey(KBD_KEYS keytype,bool pressed) {
     case KBD_rightalt:      ret=0x73;break;     // GRPH (handled by Windows as if ALT key)
     case KBD_leftctrl:      ret=0x74;break;     // CTRL
     case KBD_rightctrl:     ret=0x74;break;     // CTRL
-
+	case KBD_grave:
+		if(pc98_force_ibm_layout)
+			ret=0x1A; //HACK, reuse @ key
+		break;
+		
     case KBD_capslock:                          // CAPS
         if (pressed) {                          // sends only on keypress, does not resend if held down
             pc98_caps_toggle();
@@ -2148,6 +2152,11 @@ void KEYBOARD_OnEnterPC98(Section *sec) {
             ReadHandler_8255_PC98[i].Uninstall();
             WriteHandler_8255_PC98[i].Uninstall();
         }
+		
+		Section_prop *section=static_cast<Section_prop *>(control->GetSection("dosbox"));
+		pc98_force_ibm_layout = section->Get_bool("pc-98 force ibm keyboard layout");
+		if(pc98_force_ibm_layout)
+			LOG_MSG("Forcing PC-98 keyboard to use IBM US-English like default layout");
     }
 
     if (!IS_PC98_ARCH) {
