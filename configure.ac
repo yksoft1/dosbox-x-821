@@ -252,7 +252,7 @@ esac
 dnl Some target detection and actions for them
 case "$host" in
     *-*-cygwin* | *-*-mingw32*)
-       LIBS="$LIBS -lwinmm -limm32"
+       LIBS="$LIBS -lcomdlg32 -lwinmm -limm32"
        CXXFLAGS="$CXXFLAGS -mno-ms-bitfields"
        if test x$have_sdl_net_lib = xyes -a x$have_sdl_net_h = xyes ; then
          LIBS="$LIBS -lws2_32 "
@@ -573,6 +573,21 @@ if test x$have_fluidsynth_lib = xyes -a x$have_fluidsynth_h = xyes ; then
   AC_DEFINE(C_FLUIDSYNTH,1)
 else
   AC_MSG_WARN([fluidsynth MIDI synthesis not available])
+fi
+
+AH_TEMPLATE(C_SDL_SOUND,[Define to 1 to enable SDL_sound support])
+AC_CHECK_HEADER(SDL_sound.h,have_SDL_sound_h=yes,)
+AC_CHECK_LIB(SDL_sound, Sound_Init, have_SDL_sound_init=yes,,)
+AC_CHECK_LIB(SDL_sound, Sound_Seek, have_SDL_sound_seek=yes,,)
+if test x$have_SDL_sound_h = xyes -a x$have_SDL_sound_init = xyes ; then
+  if test x$have_SDL_sound_seek = xyes ; then
+    LIBS="-lSDL_sound $LIBS"
+    AC_DEFINE(C_SDL_SOUND,1)
+   else
+     AC_MSG_WARN([Can't find SoundSeek in libSDL_Sound, libSDL_sound support disabled])
+   fi
+else
+  AC_MSG_WARN([Can't find libSDL_sound, libSDL_sound support disabled])
 fi
 
 dnl FEATURE: FFMPEG output support

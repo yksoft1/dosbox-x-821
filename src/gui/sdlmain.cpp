@@ -4874,6 +4874,7 @@ void MOUSE_Init();
 void DOS_KeyboardLayout_Init();
 void MSCDEX_Init();
 void DRIVES_Init();
+void CDROM_Image_Init();
 void IPX_Init();
 void IDE_Init();
 void NE2K_Init();
@@ -5437,6 +5438,7 @@ int main(int argc, char* argv[]) {
 		/* OS init now */
 		DOS_Init();
 		DRIVES_Init();
+		CDROM_Image_Init();
 		DOS_KeyboardLayout_Init();
 		MOUSE_Init(); // FIXME: inits INT 15h and INT 33h at the same time. Also uses DOS_GetMemory() which is why DOS_Init must come first
 		XMS_Init();

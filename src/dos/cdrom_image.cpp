@@ -68,6 +68,67 @@ int CDROM_Interface_Image::BinaryFile::getLength()
 	return length;
 }
 
+#if defined(C_SDL_SOUND) && !defined(C_SDL2)
+CDROM_Interface_Image::AudioFile::AudioFile(const char *filename, bool &error)
+{
+	Sound_AudioInfo desired = {AUDIO_S16, 2, 44100};
+	sample = Sound_NewSampleFromFile(filename, &desired, RAW_SECTOR_SIZE);
+	lastCount = RAW_SECTOR_SIZE;
+	lastSeek = 0;
+	error = (sample == NULL);
+}
+
+CDROM_Interface_Image::AudioFile::~AudioFile()
+{
+	Sound_FreeSample(sample);
+}
+
+bool CDROM_Interface_Image::AudioFile::read(Bit8u *buffer, int seek, int count)
+{
+	if (lastCount != count) {
+		int success = Sound_SetBufferSize(sample, count);
+		if (!success) return false;
+	}
+	if (lastSeek != (seek - count)) {
+		int success = Sound_Seek(sample, (int)((double)(seek) / 176.4f));
+		if (!success) return false;
+	}
+	lastSeek = seek;
+	int bytes = Sound_Decode(sample);
+	if (bytes < count) {
+		memcpy(buffer, sample->buffer, bytes);
+		memset(buffer + bytes, 0, count - bytes);
+	} else {
+		memcpy(buffer, sample->buffer, count);
+	}
+
+	return !(sample->flags & SOUND_SAMPLEFLAG_ERROR);
+}
+
+int CDROM_Interface_Image::AudioFile::getLength()
+{
+/*	int length = Sound_GetDuration(sample);
+	return (int)floor((length * 176.4) + 0.5);*/
+	//port the SVN getLength. Daum's requires newer SDL_Sound.
+	int time = 1;
+	int shift = 0;
+	if (!(sample->flags & SOUND_SAMPLEFLAG_CANSEEK)) return -1;
+	
+	while (true) {
+		int success = Sound_Seek(sample, (unsigned int)(shift + time));
+		if (!success) {
+			if (time == 1) return lround((double)shift * 176.4f);
+			shift += time >> 1;
+			time = 1;
+		} else {
+			if (time > ((numeric_limits<int>::max() - shift) / 2)) return -1;
+			time = time << 1;
+		}
+	}
+}
+#endif
+
+
 // initialize static members
 int CDROM_Interface_Image::refCount = 0;
 CDROM_Interface_Image* CDROM_Interface_Image::images[26] = {NULL};
@@ -505,6 +566,21 @@ bool CDROM_Interface_Image::LoadCueSheet(char *cuefile)
 			if (type == "BINARY") {
 				track.file = new BinaryFile(filename.c_str(), error);
 			}
+#if defined(C_SDL_SOUND) && !defined(C_SDL2)
+			//The next if has been surpassed by the else, but leaving it in as not		
+			//to break existing cue sheets that depend on this.(mine with OGG tracks specifying MP3 as type)
+			else if (type == "WAVE" || type == "AIFF" || type == "MP3") {
+				track.file = new AudioFile(filename.c_str(), error);
+			} else {
+				const Sound_DecoderInfo **i;
+				for (i = Sound_AvailableDecoders(); *i != NULL; i++) {
+					if (*(*i)->extensions == type) {
+						track.file = new AudioFile(filename.c_str(), error);
+						break;
+					}
+				}
+			}
+#endif
 			if (error) {
 				delete track.file;
 				success = false;
@@ -704,5 +780,14 @@ void CDROM_Interface_Image::ClearTracks()
 }
 
 void CDROM_Image_Destroy(Section*) {
+#if defined(C_SDL_SOUND) && !defined(C_SDL2)
+	Sound_Quit();
+#endif
 }
 
+void CDROM_Image_Init() {
+#if defined(C_SDL_SOUND) && !defined(C_SDL2)
+	Sound_Init();
+	AddExitFunction(AddExitFunctionFuncPair(CDROM_Image_Destroy), false);
+#endif
+}
