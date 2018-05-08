@@ -592,14 +592,47 @@ public:
 	}
 };
 
+// override Input field with one that responds to the Enter key as a keyboard-based cue to click "OK"
+class InputWithEnterKey : public GUI::Input {
+public:
+										InputWithEnterKey(Window *parent, int x, int y, int w, int h = 0) : GUI::Input(parent,x,y,w,h) { };
+public:
+	void								set_trigger_target(GUI::ToplevelWindow *_who) { trigger_who = _who; };
+protected:
+	GUI::ToplevelWindow*				trigger_who = NULL;
+public:
+	std::string							trigger_enter = "OK";
+	std::string							trigger_esc = "Cancel";
+public:
+	virtual bool						keyDown(const GUI::Key &key) {
+		if (key.special == GUI::Key::Special::Enter) {
+			if (trigger_who != NULL && !trigger_enter.empty())
+				trigger_who->actionExecuted(this, trigger_enter);
+
+			return true;
+		}
+		else if (key.special == GUI::Key::Special::Escape) {
+			if (trigger_who != NULL && !trigger_esc.empty())
+				trigger_who->actionExecuted(this, trigger_esc);
+
+			return true;
+		}
+		else {
+			return GUI::Input::keyDown(key);
+		}
+	}
+};
+
 class SetCycles : public GUI::ToplevelWindow {
 protected:
-	GUI::Input *name;
+	InputWithEnterKey *name;
 public:
 	SetCycles(GUI::Screen *parent, int x, int y, const char *title) :
 		ToplevelWindow(parent, x, y, 400, 150, title) {
 		new GUI::Label(this, 5, 10, "Enter CPU cycles:");
-		name = new GUI::Input(this, 5, 30, 350);
+	//	name = new GUI::Input(this, 5, 30, 350);
+		name = new InputWithEnterKey(this, 5, 30, 350);
+		name->set_trigger_target(this);
 	    std::ostringstream str;
 		str << "fixed " << CPU_CycleMax;
 
@@ -607,6 +640,11 @@ public:
 		name->setText(cycles.c_str());
 		(new GUI::Button(this, 120, 70, "Cancel", 70))->addActionHandler(this);
 		(new GUI::Button(this, 210, 70, "OK", 70))->addActionHandler(this);
+		
+		name->raise(); /* make sure keyboard focus is on the text field, ready for the user */
+		this->raise(); /* make sure THIS WINDOW has the keyboard focus */
+
+		name->posToEnd(); /* position the cursor at the end where the user is most likely going to edit */
 	}
 
 	void actionExecuted(GUI::ActionEventSource *b, const GUI::String &arg) {
@@ -614,11 +652,8 @@ public:
 			Section* sec = control->GetSection("cpu");
 			if (sec) {
 				std::string tmp("cycles=");
-				const char* well = name->getText();
-				std::string s(well, 20);
-				tmp.append(s);
+				tmp.append((const char*)(name->getText()));
 				sec->HandleInputline(tmp);
-				delete well;
 			}
 		}
 		close();
@@ -813,7 +848,6 @@ static void UI_Execute(GUI::ScreenSDL *screen) {
 	}
 }
 
-#ifdef WIN32
 static void UI_Select(GUI::ScreenSDL *screen, int select) {
 	SDL_Surface *sdlscreen = NULL;
 	Section_line *section2 = NULL;
@@ -924,7 +958,9 @@ static void UI_Select(GUI::ScreenSDL *screen, int select) {
 
 void GUI_Shortcut(int select) {
 	if(running) return;
+#ifdef WIN32
 	if(menu.maxwindow) ShowWindow(GetHWND(), SW_RESTORE);
+#endif
 	shortcut=true;
 	GUI::ScreenSDL *screen = UI_Startup(NULL);
 	UI_Select(screen,select);
@@ -932,7 +968,6 @@ void GUI_Shortcut(int select) {
 	shortcut=false;
 	delete screen;
 }
-#endif
 
 void GUI_Run(bool pressed) {
 	if (pressed || running) return;
