@@ -599,11 +599,13 @@ public:
 public:
 	void								set_trigger_target(GUI::ToplevelWindow *_who) { trigger_who = _who; };
 protected:
-	GUI::ToplevelWindow*				trigger_who = NULL;
+	GUI::ToplevelWindow*				trigger_who;
 public:
-	std::string							trigger_enter = "OK";
-	std::string							trigger_esc = "Cancel";
+	std::string							trigger_enter;
+	std::string							trigger_esc;
 public:
+	InputWithEnterKey() : trigger_who(NULL), trigger_enter("OK"), trigger_esc("Cancel")
+	{}
 	virtual bool						keyDown(const GUI::Key &key) {
 		if (key.special == GUI::Key::Special::Enter) {
 			if (trigger_who != NULL && !trigger_enter.empty())
