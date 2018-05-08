@@ -595,8 +595,6 @@ public:
 // override Input field with one that responds to the Enter key as a keyboard-based cue to click "OK"
 class InputWithEnterKey : public GUI::Input {
 public:
-										InputWithEnterKey(Window *parent, int x, int y, int w, int h = 0) : GUI::Input(parent,x,y,w,h) { };
-public:
 	void								set_trigger_target(GUI::ToplevelWindow *_who) { trigger_who = _who; };
 protected:
 	GUI::ToplevelWindow*				trigger_who;
@@ -604,16 +602,17 @@ public:
 	std::string							trigger_enter;
 	std::string							trigger_esc;
 public:
-	InputWithEnterKey() : trigger_who(NULL), trigger_enter("OK"), trigger_esc("Cancel")
-	{}
+	InputWithEnterKey(Window *parent, int x, int y, int w, int h = 0) : GUI::Input(parent,x,y,w,h),
+			trigger_who(NULL), trigger_enter("OK"), trigger_esc("Cancel")
+	{	};
 	virtual bool						keyDown(const GUI::Key &key) {
-		if (key.special == GUI::Key::Special::Enter) {
+		if (key.special == GUI::Key::Enter) {
 			if (trigger_who != NULL && !trigger_enter.empty())
 				trigger_who->actionExecuted(this, trigger_enter);
 
 			return true;
 		}
-		else if (key.special == GUI::Key::Special::Escape) {
+		else if (key.special == GUI::Key::Escape) {
 			if (trigger_who != NULL && !trigger_esc.empty())
 				trigger_who->actionExecuted(this, trigger_esc);
 
