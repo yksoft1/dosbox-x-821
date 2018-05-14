@@ -225,7 +225,7 @@ bool						startup_state_capslock = false; // Global for keyboard initialisation
 #endif
 #endif
 
-#if (HAVE_DDRAW_H)
+#if (HAVE_DDRAW_H) && !defined(C_SDL2)
 # include <ddraw.h>
 struct private_hwdata {
 	LPDIRECTDRAWSURFACE3			dd_surface;
@@ -800,7 +800,7 @@ check_gotbpp:
 		}
 		flags |= GFX_CAN_RANDOM;
 		break;
-#if (HAVE_DDRAW_H) && defined(WIN32)
+#if (HAVE_DDRAW_H) && defined(WIN32) && !defined(C_SDL2)
 	case SCREEN_SURFACE_DDRAW:
 		if (!(flags&(GFX_CAN_15|GFX_CAN_16|GFX_CAN_32))) goto check_surface;
 		if (flags & GFX_LOVE_15) testbpp=15;
@@ -1228,7 +1228,7 @@ dosurface:
 		}
 		break;
 #endif
-#if defined(HAVE_DDRAW_H) && defined(WIN32)
+#if defined(HAVE_DDRAW_H) && defined(WIN32) && !defined(C_SDL2)
 	case SCREEN_SURFACE_DDRAW:
     {
 		if(!load_videodrv && sdl.using_windib) {
@@ -2230,7 +2230,7 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
         SDL_Overscan();
 		sdl.updating=true;
 		return true;
-#if (HAVE_DDRAW_H) && defined(WIN32)
+#if (HAVE_DDRAW_H) && defined(WIN32) && !defined (C_SDL2)
 	case SCREEN_SURFACE_DDRAW:
 		if (SDL_LockSurface(sdl.blit.surface)) {
 //			LOG_MSG("SDL Lock failed");
@@ -2319,7 +2319,7 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 #endif
 		}
 		break;
-#if (HAVE_DDRAW_H) && defined(WIN32)
+#if (HAVE_DDRAW_H) && defined(WIN32) && !defined(C_SDL2)
 	case SCREEN_SURFACE_DDRAW:
 		SDL_UnlockSurface(sdl.blit.surface);
 	if(changedLines && (changedLines[0] == sdl.draw.height)) 
@@ -2676,7 +2676,7 @@ static void GUI_StartUp() {
 
 	if (output == "surface") {
 		sdl.desktop.want_type=SCREEN_SURFACE;
-#if (HAVE_DDRAW_H) && defined(WIN32)
+#if (HAVE_DDRAW_H) && defined(WIN32) && !defined(C_SDL2)
 	} else if (output == "ddraw") {
 		sdl.desktop.want_type=SCREEN_SURFACE_DDRAW;
 #endif
@@ -4215,7 +4215,7 @@ void SDL_SetupConfigSection() {
 #if C_OPENGL
 		"opengl", "openglnb", "openglhq",
 #endif
-#if (HAVE_DDRAW_H) && defined(WIN32)
+#if (HAVE_DDRAW_H) && defined(WIN32) && !defined(C_SDL2)
 		"ddraw",
 #endif
 #if (HAVE_D3D9_H) && defined(WIN32)

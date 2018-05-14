@@ -212,6 +212,7 @@ extern "C" {
 	UINT8 fmtimer_irq2index(const UINT8 irq);
 	UINT8 fmtimer_index2irq(const UINT8 index);
 	void fmboard_on_reset();
+	void rhythm_deinitialize(void);
 }
 	
 UINT8 board86_encodeirqidx(const unsigned char idx) {
@@ -225,7 +226,17 @@ UINT8 board26k_encodeirqidx(const unsigned char idx) {
 	return (idx << 6);
 }
 
+void PC98_FM_Destroy(Section *sec) {
+	if (pc98fm_init) {
+		rhythm_deinitialize();
+	}
 	
+	if (pc98_mixer) {
+		MIXER_DelChannel(pc98_mixer);
+		pc98_mixer = NULL;
+	}
+}
+
 void PC98_FM_OnEnterPC98(Section *sec) {
     Section_prop * section=static_cast<Section_prop *>(control->GetSection("dosbox"));
 	bool was_pc98fm_init = pc98fm_init;
