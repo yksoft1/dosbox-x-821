@@ -995,6 +995,11 @@ static void GFX_ResetSDL() {
 }
 
 Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,GFX_CallBack_t callback) {
+	if (width == 0 || height == 0) {
+		E_Exit("GFX_SetSize with width=%d height=%d zero dimensions not allowed",(int)width,(int)height);
+		return 0;
+	}
+
 	if (sdl.updating)
 		GFX_EndUpdate( 0 );
 
@@ -2205,6 +2210,10 @@ bool GFX_LazyFullscreenRequested(void) {
 
 void GFX_RestoreMode(void) {
 	if (!sdl.draw.callback) return;
+	
+	if (sdl.draw.width == 0 || sdl.draw.height == 0)
+		return;
+
 	GFX_SetSize(sdl.draw.width,sdl.draw.height,sdl.draw.flags,sdl.draw.scalex,sdl.draw.scaley,sdl.draw.callback);
 	GFX_UpdateSDLCaptureState();
 }
@@ -5705,7 +5714,11 @@ void GFX_ShutDown(void) {
 }
 
 bool OpenGL_using(void) {
+#if C_OPENGL
 	return (sdl.desktop.want_type==SCREEN_OPENGL?true:false);
+#else
+	return false;
+#endif
 }
 
 bool Get_Custom_SaveDir(std::string& savedir) {

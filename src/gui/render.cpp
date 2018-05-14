@@ -319,6 +319,9 @@ static void RENDER_Reset( void ) {
 	double gfx_scalew;
 	double gfx_scaleh;
 	
+	if (width == 0 || height == 0)
+		return;
+
 	Bitu gfx_flags, xscale, yscale;
 	ScalerSimpleBlock_t		*simpleBlock = &ScaleNormal1x;
 	ScalerComplexBlock_t	*complexBlock = 0;
