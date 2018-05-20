@@ -125,7 +125,7 @@ BEGIN
 		MENUITEM "Direct3D",				       ID_DIRECT3D
 		MENUITEM "OpenGL",				       ID_OPENGL
 		MENUITEM "OpenGL_NB",				       ID_OPENGLNB
-		MENUITEM "OpenGL_HQ",				       ID_OPENGLHQ
+//		MENUITEM "OpenGL_HQ",				       ID_OPENGLHQ
 	END
 	POPUP "Resolution"
 	BEGIN

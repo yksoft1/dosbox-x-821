@@ -766,8 +766,10 @@ static SDL_Window * GFX_SetSDLOpenGLWindow(Bit16u width, Bit16u height) {
 Bitu GFX_GetBestMode(Bitu flags) {
 	Bitu testbpp,gotbpp;
 	switch (sdl.desktop.want_type) {
+#if (C_OPENGL) && (C_OPENGLHQ)
 	case SCREEN_OPENGLHQ:
 		flags|=GFX_SCALING;
+#endif
 	case SCREEN_SURFACE:
 check_surface:
 		flags &= ~GFX_LOVE_8;		//Disable love for 8bpp modes
@@ -1024,7 +1026,7 @@ Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,G
 		sdl.blit.surface=0;
 	}
 	switch (sdl.desktop.want_type) {
-#if !defined(C_SDL2)
+#if !defined(C_SDL2) && (C_OPENGL) && (C_OPENGLHQ)
 	case SCREEN_OPENGLHQ:
 		static char scale[64];
 		if (flags & GFX_CAN_8) bpp=8;
@@ -1884,6 +1886,7 @@ static void d3d_init(void) {
 }
 #endif
 
+#if (C_OPENGL) && (C_OPENGLHQ)
 static void openglhq_init(void) {
 #if defined(WIN32) && !defined(C_SDL2)
 	DOSBox_NoMenu(); menu.gui=false;
@@ -1909,6 +1912,7 @@ static void openglhq_init(void) {
 	GFX_SetTitle(-1,-1,-1,false);
 	sdl.desktop.want_type=SCREEN_OPENGLHQ;
 }
+#endif
 
 void GetDesktopResolution(int* width, int* height)
 {
@@ -2053,7 +2057,7 @@ void change_output(int output) {
 		d3d_init();
 		break;
 #endif
-#if C_OPENGL
+#if (C_OPENGL) && (C_OPENGLHQ)
 	case 6: {
 #if defined(__WIN32__) && !defined(C_SDL2)
 		if (MessageBox(GetHWND(),"GUI will be disabled if output is set to OpenglHQ. Do you want to continue?","Warning",MB_YESNO)==IDNO) {
@@ -2095,7 +2099,7 @@ void change_output(int output) {
 	if (sdl.draw.callback)
 		(sdl.draw.callback)( GFX_CallBackReset );
 
-#if !defined(C_SDL2)
+#if !defined(C_SDL2) && (C_OPENGL) && (C_OPENGLHQ)
 	if(sdl.desktop.want_type==SCREEN_OPENGLHQ) {
 		if(!render.scale.hardware) SetVal("render","scaler",!render.scale.forced?"hardware2x":"hardware2x forced");
 		if(!menu.compatible) {
@@ -2710,6 +2714,8 @@ static void GUI_StartUp() {
 		LOG_MSG("SDL:Direct3D activated");
 #endif
 #endif
+
+#if (C_OPENGL) && (C_OPENGLHQ)
 	} else if (output == "openglhq") {
 		char *oldvideo = getenv("SDL_VIDEODRIVER");
 
@@ -2725,6 +2731,7 @@ static void GUI_StartUp() {
 		putenv((char*)("SDL_VIDEODRIVER=openglhq"));
 		SDL_InitSubSystem(SDL_INIT_VIDEO);
 		sdl.desktop.want_type=SCREEN_OPENGLHQ;
+#endif
 
 	} else {
 		LOG_MSG("SDL:Unsupported output device %s, switching back to surface",output.c_str());
@@ -4226,7 +4233,10 @@ void SDL_SetupConfigSection() {
 	const char* outputs[] = {
 		"surface", "overlay",
 #if C_OPENGL
-		"opengl", "openglnb", "openglhq",
+		"opengl", "openglnb", 
+#if C_OPENGLHQ
+		"openglhq",
+#endif
 #endif
 #if (HAVE_DDRAW_H) && defined(WIN32) && !defined(C_SDL2)
 		"ddraw",
@@ -5326,6 +5336,8 @@ int main(int argc, char* argv[]) {
 		menu.startup = true;
         menu.showrt = control->opt_showrt;
 		menu.hidecycles = (control->opt_showcycles ? false : true);
+
+#if (C_OPENGL) && (C_OPENGLHQ)
 		if (sdl.desktop.want_type == SCREEN_OPENGLHQ) {
 			menu.gui=false; DOSBox_SetOriginalIcon();
 			if (!render.scale.hardware) {
@@ -5333,6 +5345,7 @@ int main(int argc, char* argv[]) {
 				SetVal("render","scaler",!render.scale.forced?"hardware2x":"hardware2x forced");
 			}
 		}
+#endif
 
 #if defined(WIN32) && !defined(C_SDL2)
 		if (sdl.desktop.want_type == SCREEN_OPENGL && sdl.using_windib) {
