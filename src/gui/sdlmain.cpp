@@ -2051,7 +2051,7 @@ void change_output(int output) {
 #endif
 		break;
 #endif
-#if defined(__WIN32__) && !defined(C_SDL2)
+#if defined(__WIN32__) && !defined(C_SDL2) && (HAVE_D3D9_H)
 	case 5:
 		sdl.desktop.want_type=SCREEN_DIRECT3D;
 		d3d_init();
@@ -2073,7 +2073,7 @@ void change_output(int output) {
 		break;
 	case 8:
 		if(sdl.desktop.want_type==SCREEN_OPENGL) { }
-#ifdef WIN32
+#if defined(WIN32) && !defined(C_SDL2) && (HAVE_D3D9_H)
 		else if(sdl.desktop.want_type==SCREEN_DIRECT3D) { if(sdl.desktop.fullscreen) GFX_CaptureMouse(); d3d_init(); }
 #endif
 		break;
@@ -3488,11 +3488,13 @@ void* GetSetSDLValue(int isget, std::string target, void* setval) {
 	if (target == "wait_on_error") {
 		if (isget) return (void*) sdl.wait_on_error;
 		else sdl.wait_on_error = setval;
-#if C_OPENGL
 	}
 	else if (target == "opengl.bilinear") {
+#if C_OPENGL
 		if (isget) return (void*) sdl.opengl.bilinear;
 		else sdl.opengl.bilinear = setval;
+#else
+		if (isget) return (void*) 0;
 #endif
 /*
 	} else if (target == "draw.callback") {

@@ -1014,7 +1014,11 @@ int Reflect_Menu(void) {
 	CheckMenuItem(m_handle, ID_ASPECT, (render.aspect) ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_SURFACE, ((uintptr_t) GetSetSDLValue(1, "desktop.want_type", 0) == SCREEN_SURFACE) ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_DDRAW, ((uintptr_t) GetSetSDLValue(1, "desktop.want_type", 0) == SCREEN_SURFACE_DDRAW) ? MF_CHECKED : MF_STRING);
+#if (HAVE_D3D9_H)
 	CheckMenuItem(m_handle, ID_DIRECT3D, ((uintptr_t) GetSetSDLValue(1, "desktop.want_type", 0) == SCREEN_DIRECT3D) ? MF_CHECKED : MF_STRING);
+#else
+	EnableMenuItem(m_handle, ID_DIRECT3D,  MF_DISABLED);
+#endif
 	if ((uintptr_t)GetSetSDLValue(1, "desktop.want_type", 0) == SCREEN_OPENGL) {
 		if (GetSetSDLValue(1, "opengl.bilinear", 0)) {
 			CheckMenuItem(m_handle, ID_OPENGL, MF_CHECKED);
@@ -1903,7 +1907,9 @@ void MSG_Loop(void) {
 			case ID_DDRAW: if ((uintptr_t) GetSetSDLValue(1, "desktop.want_type", 0) != SCREEN_SURFACE_DDRAW) { change_output(1); SetVal("sdl", "output", "ddraw"); } break;
 			case ID_OPENGL: change_output(3); SetVal("sdl", "output", "opengl"); break;
 			case ID_OPENGLNB: change_output(4); SetVal("sdl", "output", "openglnb"); break;
+#if (HAVE_D3D9_H)
 			case ID_DIRECT3D: if ((uintptr_t) GetSetSDLValue(1, "desktop.want_type", 0) != SCREEN_DIRECT3D) { change_output(5); SetVal("sdl", "output", "direct3d"); } break;
+#endif
 #if (C_OPENGL) && (C_OPENGLHQ)
 			case ID_OPENGLHQ: if ((uintptr_t) GetSetSDLValue(1, "desktop.want_type", 0) != SCREEN_OPENGLHQ) { change_output(6); SetVal("sdl", "output", "openglhq"); } break;
 #endif
