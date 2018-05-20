@@ -2259,7 +2259,9 @@ void MSG_Loop(void) {
 			case ID_OVERSCAN_10: LOG_MSG("GUI: Overscan 10 (surface)"); SetVal("sdl", "overscan", "10"); change_output(7); break;
 			case ID_VSYNC: GUI_Shortcut(17); break;
 			case ID_IPXNET: MENU_SetBool("ipx", "ipx"); break;
+#if (HAVE_D3D9_H) && (C_D3DSHADERS)
 			case ID_D3D_PS: D3D_PS(); if ((uintptr_t) GetSetSDLValue(1, "desktop.want_type", 0) == SCREEN_DIRECT3D) change_output(7); break;
+#endif
 			case ID_JOYSTICKTYPE_AUTO: SetVal("joystick", "joysticktype", "auto"); break;
 			case ID_JOYSTICKTYPE_2AXIS: SetVal("joystick", "joysticktype", "2axis"); break;
 			case ID_JOYSTICKTYPE_4AXIS: SetVal("joystick", "joysticktype", "4axis"); break;

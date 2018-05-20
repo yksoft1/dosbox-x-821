@@ -1434,6 +1434,7 @@ dosurface:
 		    }
 		}
 
+#if (C_D3DSHADERS)
 		Section_prop *section=static_cast<Section_prop *>(control->GetSection("sdl"));
 		if(section) {
 		    Prop_multival* prop = section->Get_multival("pixelshader");
@@ -1442,6 +1443,7 @@ dosurface:
 		} else {
 		    LOG_MSG("SDL:D3D:Could not get pixelshader info, shader disabled");
 		}
+#endif
 
 		d3d->aspect=RENDER_GetAspect();
 		d3d->autofit=RENDER_GetAutofit();
@@ -2544,6 +2546,7 @@ static void OutputString(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u col
 
 #if (HAVE_D3D9_H) && defined(WIN32)
 static void D3D_reconfigure() {
+# if (C_D3DSHADERS)
 	if (d3d) {
 		Section_prop *section=static_cast<Section_prop *>(control->GetSection("sdl"));
 		Prop_multival* prop = section->Get_multival("pixelshader");
@@ -2551,6 +2554,7 @@ static void D3D_reconfigure() {
 			GFX_ResetScreen();
 		}
 	}
+#endif
 }
 #endif
 
@@ -4231,7 +4235,7 @@ void SDL_SetupConfigSection() {
 		"direct3d",
 #endif
 		0 };
-#ifdef __WIN32__
+#if (HAVE_D3D9_H) && defined(WIN32)
 		Pstring = sdl_sec->Add_string("output",Property::Changeable::Always,"direct3d");
 #else
 		Pstring = sdl_sec->Add_string("output",Property::Changeable::Always,"surface");
