@@ -1986,9 +1986,11 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 
 				size -= accsize;
 				
-				if ((++fdc_sect[drive]) > img_sect) {
+				if (size == 0) break;
+				
+				if ((++fdc_sect[drive]) > img_sect && img_sect != 0) {
 					fdc_sect[drive] = 1;
-					if ((++fdc_head[drive]) >= img_heads) {
+					if ((++fdc_head[drive]) >= img_heads && img_heads != 0) {
 						fdc_head[drive] = 0;
 						fdc_cyl[drive]++;
 					}
@@ -2062,10 +2064,12 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 
                 memaddr += accsize;
                 size -= accsize;
+				
+				if (size == 0) break;
 
-                if ((++fdc_sect[drive]) > img_sect) {
+                if ((++fdc_sect[drive]) > img_sect && img_sect != 0) {
                     fdc_sect[drive] = 1;
-                    if ((++fdc_head[drive]) >= img_heads) {
+                    if ((++fdc_head[drive]) >= img_heads && img_heads != 0) {
                         fdc_head[drive] = 0;
                         fdc_cyl[drive]++;
                     }
@@ -2153,10 +2157,12 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 
                 memaddr += accsize;
                 size -= accsize;
+				
+				if (size == 0) break;
 
-                if ((++fdc_sect[drive]) > img_sect) {
+                if ((++fdc_sect[drive]) > img_sect && img_sect != 0) {
                     fdc_sect[drive] = 1;
-                    if ((++fdc_head[drive]) >= img_heads) {
+                    if ((++fdc_head[drive]) >= img_heads && img_heads != 0) {
                         fdc_head[drive] = 0;
                         fdc_cyl[drive]++;
                     }
@@ -2178,6 +2184,8 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
             CALLBACK_SCF(false);
             break;
         case 0x0A: /* read ID */
+			/* NTS: PC-98 "MEGDOS" used by some games seems to rely heavily on this call to
+			 * verify the floppy head is where it thinks it should be! */
             if (floppy == NULL) {
                 CALLBACK_SCF(true);
                 reg_ah = 0x00;
@@ -2188,14 +2196,14 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
 	        floppy->Get_Geometry(&img_heads, &img_cyl, &img_sect, &img_ssz);
  
             if (reg_ah & 0x10) { // seek to track number in CL
-                if (reg_cl >= img_cyl) {
+                if (img_cyl != 0 && reg_cl >= img_cyl) {
                     CALLBACK_SCF(true);
                     reg_ah = 0x00;
                     /* TODO? Error code? */
                     return;
                 }
 
-                fdc_cyl[drive] = img_cyl;
+                fdc_cyl[drive] = reg_cl;
             }
 			
 			if (fdc_sect[drive] == 0)
@@ -2217,7 +2225,14 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
              *          where N=sectors/track because the floppy motor is running and tracks
              *          are moving past the head. */
             reg_ch = fdc_sz[drive];
-
+			
+			/* per read ID call, increment the sector through the range on disk.
+			 * This is REQUIRED or else MEGDOS will not attempt to read this disk. */
+			if (img_sect != 0) {
+				if ((++fdc_sect[drive]) > img_sect)
+				fdc_sect[drive] = 1;
+			}
+			
             reg_ah = 0x00;
             CALLBACK_SCF(false);
             break;
@@ -5338,7 +5353,7 @@ public:
 		}
 
 		/* pick locations */
-		if (mainline_compatible_bios_mapping) { /* mapping BIOS the way mainline DOSBox does */
+		if (!IS_PC98_ARCH && mainline_compatible_bios_mapping) { /* mapping BIOS the way mainline DOSBox does */
 			BIOS_DEFAULT_RESET_LOCATION = RealMake(0xf000,0xe05b);
 			BIOS_DEFAULT_HANDLER_LOCATION = RealMake(0xf000,0xff53);
 			BIOS_DEFAULT_IRQ0_LOCATION = RealMake(0xf000,0xfea5);
@@ -5782,7 +5797,7 @@ void write_ID_version_string() {
 	str_ver_at = 0xFE061;
 	str_id_len = strlen(bios_type_string)+1;
 	str_ver_len = strlen(bios_version_string)+1;
-	if (!mainline_compatible_bios_mapping) {
+	if (!mainline_compatible_bios_mapping  && !IS_PC98_ARCH) {
 		/* need to mark these strings off-limits so dynamic allocation does not overwrite them */
 		ROMBIOS_GetMemory(str_id_len+1,"BIOS ID string",1,str_id_at);
 		ROMBIOS_GetMemory(str_ver_len+1,"BIOS version string",1,str_ver_at);
@@ -5808,27 +5823,40 @@ void ROMBIOS_Init() {
 	oi = section->Get_int("rom bios minimum size"); /* in KB */
 	oi = (oi + 3) & ~3; /* round to 4KB page */
 	if (oi > 128) oi = 128;
-	if (oi == 0) oi = (mainline_compatible_bios_mapping && machine != MCH_PCJR) ? 128 : 64;
+	if (oi == 0) {
+		if (IS_PC98_ARCH)
+			oi = 96;
+		else
+			oi = (mainline_compatible_bios_mapping && machine != MCH_PCJR) ? 128 : 64;
+	}
 	if (oi < 8) oi = 8; /* because of some of DOSBox's fixed ROM structures we can only go down to 8KB */
 	rombios_minimum_size = (oi << 10); /* convert to minimum, using size coming downward from 1MB */
 
 	oi = section->Get_int("rom bios allocation max"); /* in KB */
 	oi = (oi + 3) & ~3; /* round to 4KB page */
 	if (oi > 128) oi = 128;
-	if (oi == 0) oi = (mainline_compatible_bios_mapping && machine != MCH_PCJR) ? 128 : 64;
+	if (oi == 0) {
+		if (IS_PC98_ARCH)
+			oi = 96;
+		else
+			oi = (mainline_compatible_bios_mapping && machine != MCH_PCJR) ? 128 : 64;
+	}
 	if (oi < 8) oi = 8; /* because of some of DOSBox's fixed ROM structures we can only go down to 8KB */
 	oi <<= 10;
 	if (oi < rombios_minimum_size) oi = rombios_minimum_size;
 	rombios_minimum_location = 0x100000 - oi; /* convert to minimum, using size coming downward from 1MB */
 
 	/* in mainline compatible, make sure we cover the 0xF0000-0xFFFFF range */
-	if (mainline_compatible_bios_mapping && rombios_minimum_location > 0xF0000) {
+	if (!IS_PC98_ARCH && mainline_compatible_bios_mapping && rombios_minimum_location > 0xF0000) {
 		rombios_minimum_location = 0xF0000;
 		rombios_minimum_size = 0x10000;
 	}
 
 	LOG(LOG_BIOS,LOG_DEBUG)("ROM BIOS range: 0x%05X-0xFFFFF",(int)rombios_minimum_location);
 	LOG(LOG_BIOS,LOG_DEBUG)("ROM BIOS range according to minimum size: 0x%05X-0xFFFFF",(int)(0x100000 - rombios_minimum_size));
+
+	if (IS_PC98_ARCH && rombios_minimum_location > 0xE8000)
+		LOG(LOG_BIOS,LOG_DEBUG)("Caution: Minimum ROM base higher than E8000 will prevent use of actual PC-98 BIOS image or N88 BASIC");
 
 	if (!MEM_map_ROM_physmem(rombios_minimum_location,0xFFFFF)) E_Exit("Unable to map ROM region as ROM");
 
@@ -5858,7 +5886,7 @@ void ROMBIOS_Init() {
 	write_ID_version_string();
 
 	/* some structures when enabled are fixed no matter what */
-	if (!mainline_compatible_bios_mapping && rom_bios_8x8_cga_font) {
+	if (!mainline_compatible_bios_mapping && rom_bios_8x8_cga_font && !IS_PC98_ARCH) {
 		/* line 139, int10_memory.cpp: the 8x8 font at 0xF000:FA6E, first 128 chars.
 		 * allocate this NOW before other things get in the way */
 		if (ROMBIOS_GetMemory(128*8,"BIOS 8x8 font (first 128 chars)",1,0xFFA6E) == 0) {
@@ -5873,7 +5901,7 @@ void ROMBIOS_Init() {
 		}
 	}
 
-	if (mainline_compatible_bios_mapping) {
+	if (!IS_PC98_ARCH && mainline_compatible_bios_mapping) {
 		/* then mark the region 0xE000-0xFFF0 as off-limits.
 		 * believe it or not, there's this whole range between 0xF3000 and 0xFE000 that remains unused! */
 		if (ROMBIOS_GetMemory(0xFFFF0-0xFE000,"BIOS with fixed layout",1,0xFE000) == 0)
