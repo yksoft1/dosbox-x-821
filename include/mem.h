@@ -316,52 +316,56 @@ void mem_strcpy(PhysPt dest,PhysPt src);
 
 /* The folowing functions are all shortcuts to the above functions using physical addressing */
 
+static INLINE PhysPt PhysMake(const Bit16u seg,const Bit16u off) {
+	return ((PhysPt)seg << (PhysPt)4U) + (PhysPt)off;
+}
+
 static INLINE Bit8u real_readb(const Bit16u seg,const Bit16u off) {
-	return mem_readb(((Bit32u)seg << 4U) + (Bit32u)off);
+	return mem_readb(PhysMake(seg,off));
 }
 static INLINE Bit16u real_readw(const Bit16u seg,const Bit16u off) {
-	return mem_readw(((Bit32u)seg << 4U) + (Bit32u)off);
+	return mem_readw(PhysMake(seg,off));
 }
 static INLINE Bit32u real_readd(const Bit16u seg,const Bit16u off) {
-	return mem_readd(((Bit32u)seg << 4U) + (Bit32u)off);
+	return mem_readd(PhysMake(seg,off));
 }
 
 static INLINE void real_writeb(const Bit16u seg,const Bit16u off,const Bit8u val) {
-	mem_writeb((((Bit32u)seg << 4U) + (Bit32u)off),val);
+	mem_writeb(PhysMake(seg,off),val);
 }
 static INLINE void real_writew(const Bit16u seg,const Bit16u off,const Bit16u val) {
-	mem_writew((((Bit32u)seg << 4U) + (Bit32u)off),val);
+	mem_writew(PhysMake(seg,off),val);
 }
 static INLINE void real_writed(const Bit16u seg,const Bit16u off,const Bit32u val) {
-	mem_writed((((Bit32u)seg << 4U) + (Bit32u)off),val);
+	mem_writed(PhysMake(seg,off),val);
 }
 
 
-static INLINE Bit16u RealSeg(RealPt pt) {
+static INLINE Bit16u RealSeg(const RealPt pt) {
 	return (Bit16u)(pt>>16);
 }
 
-static INLINE Bit16u RealOff(RealPt pt) {
+static INLINE Bit16u RealOff(const RealPt pt) {
 	return (Bit16u)(pt&0xffff);
 }
 
-static INLINE PhysPt Real2Phys(RealPt pt) {
+static INLINE PhysPt Real2Phys(const RealPt pt) {
 	return (RealSeg(pt)<<4) +RealOff(pt);
 }
 
-static INLINE PhysPt PhysMake(Bit16u seg,Bit16u off) {
-	return (seg<<4)+off;
-}
-
-static INLINE RealPt RealMake(Bit16u seg,Bit16u off) {
+static INLINE RealPt RealMake(const Bit16u seg,const Bit16u off) {
 	return (seg<<16)+off;
 }
 
-static INLINE void RealSetVec(Bit8u vec,RealPt pt) {
+static INLINE RealPt RealGetVec(const Bit8u vec) {
+	return mem_readd(vec<<2);
+}
+
+static INLINE void RealSetVec(const Bit8u vec,const RealPt pt) {
 	mem_writed(vec<<2,pt);
 }
 
-static INLINE void RealSetVec(Bit8u vec,RealPt pt,RealPt &old) {
+static INLINE void RealSetVec(const Bit8u vec,const RealPt pt,RealPt &old) {
 	old = mem_readd(vec<<2);
 	mem_writed(vec<<2,pt);
 }
@@ -370,10 +374,6 @@ static INLINE void RealSetVec(Bit8u vec,RealPt pt,RealPt &old) {
 static INLINE RealPt PhysToReal416(PhysPt phys) {
 	return RealMake((phys>>4)&0xF000,phys&0xFFFF);
 }
-
-static INLINE RealPt RealGetVec(Bit8u vec) {
-	return mem_readd(vec<<2);
-}	
 
 #endif
 
