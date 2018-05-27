@@ -34,6 +34,8 @@ MixerChannel *pc98_mixer = NULL;
 
 NP2CFG pccore;
 
+extern unsigned char pc98_mem_msw_m[8];
+
 extern "C" unsigned char *CGetMemBase() {
     return MemBase;
 }
@@ -250,6 +252,8 @@ void PC98_FM_OnEnterPC98(Section *sec) {
         board = section->Get_string("pc-98 fm board");
         if (board == "off" || board == "false") return;
 
+		pc98_mem_msw_m[3/*MSW4*/] |= 0x8; //Use of SOUND expansion ROM, some older games need this
+		
 		irq = section->Get_int("pc-98 fm board irq");
 		baseio = section->Get_hex("pc-98 fm board io port");
 	
