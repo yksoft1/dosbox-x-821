@@ -878,10 +878,10 @@ public:
 		}
 
 		if (!force && imageDiskList[drive-65]->class_id == imageDisk::ID_D88) {
-			WriteOut("D88 images cannot be booted from in this emulator for now.\n"
-				"D88 is normally associated with PC-88 and the Z80 instruction set\n"
-				"which this emulator does not support.");
-			return;
+			if (reinterpret_cast<imageDiskD88*>(imageDiskList[drive-65])->fd_type_major == imageDiskD88::DISKTYPE_2D) {
+				WriteOut("The D88 image appears to target PC-88 and cannot be booted.");
+				return;
+			}
 		}
 
 		bootSector bootarea;

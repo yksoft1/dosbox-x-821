@@ -118,6 +118,16 @@ class imageDiskD88 : public imageDisk {
 		virtual Bit8u Write_AbsoluteSector(Bit32u sectnum, void * data);
 		imageDiskD88(FILE *imgFile, Bit8u *imgName, Bit32u imgSizeK, bool isHardDisk);
 		virtual ~imageDiskD88();
+		
+		unsigned char fd_type_major;
+		unsigned char fd_type_minor;
+
+		enum { /* major */
+			DISKTYPE_2D = 0,
+			DISKTYPE_2DD,
+			DISKTYPE_2HD
+		};
+
 		struct vfdentry {
 				uint8_t track,head,sector;
 				uint16_t sector_size;

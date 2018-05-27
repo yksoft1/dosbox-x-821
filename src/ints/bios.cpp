@@ -1927,6 +1927,20 @@ void PC98_BIOS_FDC_CALL(unsigned int flags) {
         /* TODO: 0x0A = Read ID */
         /* TODO: 0x0D = Format track */
         /* TODO: 0x0E = ?? */
+		case 0x00: /* seek */
+			/* CL = track */
+			if (floppy == NULL) {
+				CALLBACK_SCF(true);
+				reg_ah = 0x00;
+				/* TODO? Error code? */
+				return;
+			}
+
+			fdc_cyl[drive] = reg_cl;
+
+			reg_ah = 0x00;
+			CALLBACK_SCF(false);
+			break;
 		case 0x01: /* test read */
 			/* AH bits[4:4] = If set, seek to track specified */
 			/* CL = cylinder (track) */
@@ -2300,6 +2314,10 @@ static Bitu INT1B_PC98_Handler(void) {
         case 0xB0:
             PC98_BIOS_FDC_CALL(PC98_FLOPPY_HIGHDENSITY|PC98_FLOPPY_2HEAD|PC98_FLOPPY_RPM_IBMPC);
             break;
+		case 0x70: /* 720KB DD (??) */
+		case 0xF0:
+			PC98_BIOS_FDC_CALL(PC98_FLOPPY_2HEAD|PC98_FLOPPY_RPM_3MODE); // FIXME, correct??
+			break;
         case 0x20: /* SCSI hard disk BIOS */
         case 0xA0: /* SCSI hard disk BIOS */
         case 0x00: /* SASI hard disk BIOS */
