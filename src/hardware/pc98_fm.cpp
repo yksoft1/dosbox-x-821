@@ -35,6 +35,7 @@ MixerChannel *pc98_mixer = NULL;
 NP2CFG pccore;
 
 extern unsigned char pc98_mem_msw_m[8];
+bool pc98_soundbios_enabled = false;
 
 extern "C" unsigned char *CGetMemBase() {
     return MemBase;
@@ -239,6 +240,15 @@ void PC98_FM_Destroy(Section *sec) {
 	}
 }
 
+void pc98_set_msw4_soundbios(void)
+{
+	/* Set MSW4 bit 3 for sound BIOS. */
+	if(pc98_soundbios_enabled)
+		pc98_mem_msw_m[3/*MSW4*/] |= 0x8;
+	else
+		pc98_mem_msw_m[3/*MSW4*/] &= ~((unsigned char)0x8);
+}
+
 void PC98_FM_OnEnterPC98(Section *sec) {
     Section_prop * section=static_cast<Section_prop *>(control->GetSection("dosbox"));
 	bool was_pc98fm_init = pc98fm_init;
@@ -252,11 +262,13 @@ void PC98_FM_OnEnterPC98(Section *sec) {
         board = section->Get_string("pc-98 fm board");
         if (board == "off" || board == "false") return;
 
-		pc98_mem_msw_m[3/*MSW4*/] |= 0x8; //Use of SOUND expansion ROM, some older games need this
-		
 		irq = section->Get_int("pc-98 fm board irq");
 		baseio = section->Get_hex("pc-98 fm board io port");
 	
+		pc98_soundbios_enabled = section->Get_bool("pc-98 sound bios");
+		pc98_set_msw4_soundbios();
+		/* TODO: Load SOUND.ROM to CC000h - CFFFFh when Sound BIOS is enabled*/
+		
 		/* PC-9801-26K and PC-9801-86 factory defaults to INT5/IRQ12 */ 
 		if (irq == 0) irq = 12;
 		
