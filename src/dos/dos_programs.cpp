@@ -57,6 +57,41 @@ bool Mouse_Vertical = false;
 Bitu DEBUG_EnableDebugger(void);
 #endif
 
+//copied from https://git.enlightenment.org/legacy/evil.git/tree/src/lib/evil_string.c
+char *mystrcasestr(const char *haystack, const char *needle)
+{
+   size_t length_needle;
+   size_t length_haystack;
+   size_t i;
+
+   if (!haystack || !needle)
+     return NULL;
+
+   length_needle = strlen(needle);
+   length_haystack = strlen(haystack) - length_needle + 1;
+
+   for (i = 0; i < length_haystack; i++)
+     {
+        size_t j;
+
+        for (j = 0; j < length_needle; j++)
+          {
+            unsigned char c1;
+            unsigned char c2;
+
+            c1 = haystack[i+j];
+            c2 = needle[j];
+            if (toupper(c1) != toupper(c2))
+              goto next;
+          }
+        return (char *) haystack + i;
+     next:
+        ;
+     }
+
+   return NULL;
+}
+
 class MOUSE : public Program {
 public:
 	void Run(void);
@@ -654,12 +689,13 @@ public:
    
 	void Run(void) {
 		bool swaponedrive = false;
+		bool force = false;
 	
 		if (cmd->FindExist("-swap-one-drive",true))
 			swaponedrive = true;
 			
 		if (cmd->FindExist("-force",true)) {	
-		//no longer needed
+			force = true;
 		}
 		
 		//Hack To allow long commandlines
@@ -754,7 +790,10 @@ public:
 					fseeko64(usefile, 0L, SEEK_SET);
 					fread(tmp,256,1,usefile); // look for magic signatures
 
-					if (!memcmp(tmp,"VFD1.",5)) { /* FDD files */
+					if (mystrcasestr(temp_line.c_str(), ".d88") != NULL) {
+						newDiskSwap[i] = new imageDiskD88(usefile, (Bit8u *)temp_line.c_str(), floppysize, false);
+					}
+					else if (!memcmp(tmp,"VFD1.",5)) { /* FDD files */
 						newDiskSwap[i] = new imageDiskVFD(usefile, (Bit8u *)temp_line.c_str(), floppysize, false);
 					}
 					else {
@@ -835,6 +874,13 @@ public:
 
 		if(imageDiskList[drive-65]==NULL) {
 			WriteOut(MSG_Get("PROGRAM_BOOT_UNABLE"), drive);
+			return;
+		}
+
+		if (!force && imageDiskList[drive-65]->class_id == imageDisk::ID_D88) {
+			WriteOut("D88 images cannot be booted from in this emulator for now.\n"
+				"D88 is normally associated with PC-88 and the Z80 instruction set\n"
+				"which this emulator does not support.");
 			return;
 		}
 
@@ -3564,7 +3610,14 @@ private:
 			fseeko64(newDisk, 0L, SEEK_SET);
 			fread(tmp, 256, 1, newDisk); // look for magic signatures
 
-			if (!memcmp(tmp, "VFD1.", 5)) { /* FDD files */
+			if (mystrcasestr(fileName, ".d88") != NULL) {
+				fseeko64(newDisk, 0L, SEEK_END);
+				sectors = (Bit64u)ftello64(newDisk) / (Bit64u)sizes[0];
+				imagesize = (Bit32u)(sectors / 2); /* orig. code wants it in KBs */
+				setbuf(newDisk, NULL);
+				newImage = new imageDiskD88(newDisk, (Bit8u *)fileName, imagesize, (imagesize > 2880));
+			}
+			else if (!memcmp(tmp, "VFD1.", 5)) { /* FDD files */
 				fseeko64(newDisk, 0L, SEEK_END);
 				sectors = (Bit64u)ftello64(newDisk) / (Bit64u)sizes[0];
 				imagesize = (Bit32u)(sectors / 2); /* orig. code wants it in KBs */
