@@ -5536,6 +5536,12 @@ fresh_boot:
                 reboot_dos = true;
                 dos_kernel_shutdown = !dos_kernel_disabled; /* only if DOS kernel enabled */
             }
+			else if (x == 8) { /* Booting to a BIOS, shutting down DOSBox BIOS */
+				LOG(LOG_MISC,LOG_DEBUG)("Emulation threw a signal to boot into BIOS image");
+
+				reboot_machine = true;
+				dos_kernel_shutdown = !dos_kernel_disabled; /* only if DOS kernel enabled */
+			}
             else {
                 LOG(LOG_MISC,LOG_DEBUG)("Emulation threw DOSBox kill switch signal");
 
