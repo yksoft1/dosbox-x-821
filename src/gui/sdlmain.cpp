@@ -5028,6 +5028,8 @@ bool VM_PowerOn() {
 	return true;
 }
 
+bool custom_bios = false;
+
 //extern void UI_Init(void);
 int main(int argc, char* argv[]) {
     CommandLine com_line(argc,argv);
@@ -5646,7 +5648,13 @@ fresh_boot:
 			/* new code: fire event */
 			DispatchVMEvent(VM_EVENT_RESET);
 			DispatchVMEvent(VM_EVENT_RESET_END);
-
+			
+			/* HACK: EGA/VGA modes will need VGA BIOS mapped in, ready to go */
+			if (IS_EGAVGA_ARCH) {
+				void INT10_Startup(Section *sec);
+				INT10_Startup(NULL);
+			}
+			
             /* run again */
             goto fresh_boot;
 		}
