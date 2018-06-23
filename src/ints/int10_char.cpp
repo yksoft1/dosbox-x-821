@@ -437,12 +437,12 @@ void INT10_GetScreenColumns(Bit16u *cols)
 void INT10_GetCursorPos(Bit8u *row, Bit8u *col, const Bit8u page)
 {
 	if (IS_PC98_ARCH) {
-		*col = real_readb(BIOSMEM_SEG, BIOSMEM_CURSOR_POS + page * 2);
-		*row = real_readb(BIOSMEM_SEG, BIOSMEM_CURSOR_POS + page * 2 + 1);
+		*col = real_readb(0x60, 0x11C);
+		*row = real_readb(0x60, 0x110);
 	} 
 	else {
-		*col = real_readb(0x60, 0x11C);
-		*row = real_readb(0x60, 0x110);	
+		*col = real_readb(BIOSMEM_SEG, BIOSMEM_CURSOR_POS + page * 2);
+		*row = real_readb(BIOSMEM_SEG, BIOSMEM_CURSOR_POS + page * 2 + 1);		
 	}
 }
 
