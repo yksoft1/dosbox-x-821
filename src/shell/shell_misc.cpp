@@ -214,6 +214,10 @@ void DOS_Shell::InputCommand(char * line) {
 				else {
 					cr = (Bit16u)c;
 				}
+			}
+			else {
+                cr = (Bit16u)c;
+			}
         }
         else {
             if (c == 0) {
