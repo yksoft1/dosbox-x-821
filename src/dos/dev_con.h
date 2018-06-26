@@ -176,7 +176,6 @@ private:
         if (IS_PC98_ARCH) {
             if (con_sjis.take(xChar)) {
                 BIOS_NCOLS;BIOS_NROWS;
-				Bit8u defattr = DefaultANSIAttr();
                 Bit8u page=real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
                 Bit8u cur_row=CURSOR_POS_ROW(page);
                 Bit8u cur_col=CURSOR_POS_COL(page);
