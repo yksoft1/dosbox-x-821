@@ -116,7 +116,6 @@ BEGIN
 		MENUITEM "2xSai",				       ID_2XSAI
 		MENUITEM "Super2xSai",				       ID_SUPER2XSAI
 		MENUITEM "SuperEagle",				       ID_SUPEREAGLE
-		MENUITEM "xBRZ",				       ID_XBRZ
 	END
 	POPUP "Output"
 	BEGIN

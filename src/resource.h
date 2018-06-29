@@ -568,7 +568,6 @@
 #define ID_BOOT_A_MOUNTED               657
 #define ID_BOOT_C_MOUNTED               658
 #define ID_BOOT_D_MOUNTED               659
-#define ID_XBRZ                         660
 #define ID_NORMAL4X                     661
 #define ID_NORMAL5X                     662
 #define ID_HARDWARE_NONE                663
