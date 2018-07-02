@@ -1905,6 +1905,8 @@ public:
                     match = false;
                 else if (ModeList_VGA[array_i].type == M_ERROR)
                     match = false;
+				else if (ModeList_VGA[array_i].mode <= 0x13)
+					match = false;
 
                 if (!match)
                     array_i++;
@@ -1925,6 +1927,10 @@ public:
             WriteOut("Mode not found\n");
             return;
         }
+		else if (ModeList_VGA[array_i].mode <= 0x13) {
+			WriteOut("Editing base VGA modes is not allowed\n");
+			return;
+		}
         else if (modefind) {
             WriteOut("Found mode 0x%x\n",(unsigned int)ModeList_VGA[array_i].mode);
         }
@@ -1947,9 +1953,19 @@ public:
             if (fmt >= 0) {
                 ModeList_VGA[array_i].type = (VGAModes)fmt;
                 /* will require reprogramming width in some cases! */
-                w = ModeList_VGA[array_i].swidth;
+                if (w < 0) w = ModeList_VGA[array_i].swidth;
             }
             if (w > 0) {
+				/* enforce alignment to avoid problems with modesetting code */
+				{
+					unsigned int aln = 8;
+
+					if (ModeList_VGA[array_i].type == M_LIN4)
+						aln = 16;
+
+					w += aln / 2;
+					w -= w % aln;
+				}
                 ModeList_VGA[array_i].swidth = (Bitu)w;
                 if (ModeList_VGA[array_i].type == M_LIN15 || ModeList_VGA[array_i].type == M_LIN16) {
                     ModeList_VGA[array_i].hdispend = (Bitu)w / 4;
@@ -1978,7 +1994,7 @@ public:
             if (ch == 8 || ch == 14 || ch == 16)
                 ModeList_VGA[array_i].cheight = (Bitu)ch;
 
-            ModeList_VGA[array_i].twidth = ModeList_VGA[array_i].swidth / 8u;
+            ModeList_VGA[array_i].twidth = ModeList_VGA[array_i].swidth / ModeList_VGA[array_i].cwidth;
             ModeList_VGA[array_i].theight = ModeList_VGA[array_i].sheight / ModeList_VGA[array_i].cheight;
         }
 
