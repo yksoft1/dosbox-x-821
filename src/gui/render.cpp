@@ -213,7 +213,6 @@ bool RENDER_StartUpdate(void) {
 		if (GCC_UNLIKELY(!GFX_StartUpdate( render.scale.outWrite, render.scale.outPitch )))
 			return false;
 		render.fullFrame = true;
-		render.scale.clearCache = false;
 		RENDER_DrawLine = RENDER_ClearCacheHandler;
 	} else {
 		if (render.pal.changed) {
@@ -248,6 +247,10 @@ void PauseDOSBox(bool pressed);
 void RENDER_EndUpdate( bool abort ) {
 	if (GCC_UNLIKELY(!render.updating))
 		return;
+
+	if (!abort && render.active && RENDER_DrawLine == RENDER_ClearCacheHandler)
+		render.scale.clearCache = false;
+
 	RENDER_DrawLine = RENDER_EmptyLineHandler;
 	if (GCC_UNLIKELY(CaptureState & (CAPTURE_IMAGE|CAPTURE_VIDEO))) {
 		Bitu pitch, flags;
@@ -718,14 +721,21 @@ void RENDER_SetForceUpdate(bool f) {
 void RENDER_OnSectionPropChange(Section *x) {
 	Section_prop * section = static_cast<Section_prop *>(control->GetSection("render"));
 
+	bool p_doublescan = vga.draw.doublescan_set;
+	bool p_char9 = vga.draw.char9_set;
+	
 	bool p_aspect = render.aspect;
 
 	render.aspect = section->Get_bool("aspect");
 	render.frameskip.max = section->Get_int("frameskip");
 
-	if (render.aspect != p_aspect) {
+	vga.draw.doublescan_set=section->Get_bool("doublescan");
+	vga.draw.char9_set=section->Get_bool("char9");
+	if (render.aspect != p_aspect || vga.draw.doublescan_set != p_doublescan || vga.draw.char9_set != p_char9)
 		RENDER_CallBack(GFX_CallBackReset);
-	}
+	if (vga.draw.doublescan_set != p_doublescan || vga.draw.char9_set != p_char9)
+		VGA_StartResize();	
+
 }
 
 void RENDER_Init() {
