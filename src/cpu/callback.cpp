@@ -330,6 +330,7 @@ Bitu CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress, bool use_
 		phys_writeb(physAddress+0x0e,(Bit8u)0xcf);		//An IRET Instruction
 		return (use_cb?0x13:0x0f);
 	case CB_IRQ1:	// keyboard int9
+		phys_writeb(physAddress+0x00,(Bit8u)0x50); // push ax
 		if (machine == MCH_PCJR || IS_PC98_ARCH) {
 			/* NTS: NEC PC-98 does not have keyboard input on port 60h, it's a 8251 UART elsewhere.
 			 *
