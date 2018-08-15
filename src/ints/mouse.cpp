@@ -49,6 +49,7 @@ void KEYBOARD_AUX_Event(float x,float y,Bitu buttons,int scrollwheel);
 
 bool en_int33=false;
 bool en_bios_ps2mouse=false;
+bool cell_granularity_disable=false;
 
 void DisableINT33() {
 	if (en_int33) {
