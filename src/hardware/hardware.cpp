@@ -297,6 +297,7 @@ void ffmpeg_flushout() {
 }
 #endif
 
+/* FIXME: This needs to be an enum */
 bool native_zmbv = false;
 bool export_ffmpeg = false;
 
@@ -620,6 +621,44 @@ void CAPTURE_VideoEvent(bool pressed) {
 	} else {
 		CaptureState |= CAPTURE_VIDEO;
 	}
+}
+
+void CAPTURE_StartCapture(void) {
+#if (C_SSHOT)
+	if (!(CaptureState & CAPTURE_VIDEO))
+		CAPTURE_VideoEvent(true);
+#endif
+}
+
+void CAPTURE_StopCapture(void) {
+#if (C_SSHOT)
+	if (CaptureState & CAPTURE_VIDEO)
+		CAPTURE_VideoEvent(true);
+#endif
+}
+
+void CAPTURE_WaveEvent(bool pressed);
+
+void CAPTURE_StartWave(void) {
+	if (!(CaptureState & CAPTURE_WAVE))
+		CAPTURE_WaveEvent(true);
+}
+
+void CAPTURE_StopWave(void) {
+	if (CaptureState & CAPTURE_WAVE)
+		CAPTURE_WaveEvent(true);
+}
+
+void CAPTURE_MTWaveEvent(bool pressed);
+
+void CAPTURE_StartMTWave(void) {
+	if (!(CaptureState & CAPTURE_MULTITRACK_WAVE))
+		CAPTURE_MTWaveEvent(true);
+}
+
+void CAPTURE_StopMTWave(void) {
+	if (CaptureState & CAPTURE_MULTITRACK_WAVE)
+		CAPTURE_MTWaveEvent(true);
 }
 
 extern uint32_t GFX_palette32bpp[256];
