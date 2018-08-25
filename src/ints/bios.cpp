@@ -4787,6 +4787,7 @@ private:
 					break;
 				case EGAVGA_ARCH_CASE:
 				case MCH_CGA:
+				case MCH_MCGA:
 				case TANDY_ARCH_CASE:
 				case MCH_AMSTRAD:
 					//Startup 80x25 color
@@ -5004,7 +5005,7 @@ private:
 
 			DrawDOSBoxLogoVGA(logo_x*8,logo_y*rowheight);
 		}
-		else if (machine == MCH_CGA || machine == MCH_PCJR || machine == MCH_AMSTRAD || machine == MCH_TANDY) {
+		else if (machine == MCH_CGA || machine == MCH_MCGA || machine == MCH_PCJR || machine == MCH_AMSTRAD || machine == MCH_TANDY) {
 			rowheight = 8;
 			reg_eax = 6;		// 640x200 2-color
 			CALLBACK_RunRealInt(0x10);
@@ -5106,6 +5107,9 @@ private:
 				case MCH_CGA:
 					card = "IBM Color Graphics Adapter";
 					break;
+                case MCH_MCGA:
+                    card = "IBM Multi Color Graphics Adapter";
+                    break;
 				case MCH_HERC:
 					card = "IBM Monochrome Display Adapter (Hercules)";
 					break;

@@ -129,9 +129,19 @@ Bitu INT10_Handler(void) {
 		reg_ah=(Bit8u)real_readw(BIOSMEM_SEG,BIOSMEM_NB_COLS);
 		break;					
 	case 0x10:								/* Palette functions */
-		if (!IS_EGAVGA_ARCH && (reg_al>0x02)) break;
-		else if (!IS_VGA_ARCH && (reg_al>0x03)) break;
-		else if (machine==MCH_PCJR && (reg_al>0x02)) break; /* "Looking at the PCjr tech ref page A-61, ... the BIOS listing stops at subfunction 2." */
+        if (machine==MCH_MCGA) {
+            if (!(reg_al == 0x10 || reg_al == 0x12 || reg_al == 0x15 || reg_al == 0x17 || reg_al == 0x18 || reg_al == 0x19))
+                break;
+        }
+        else if (machine==MCH_PCJR) {
+            if (reg_al>0x02) /* "Looking at the PCjr tech ref page A-61, ... the BIOS listing stops at subfunction 2." */
+                break;
+        }
+        else {
+            if (!IS_EGAVGA_ARCH && (reg_al>0x02)) break;
+            else if (!IS_VGA_ARCH && (reg_al>0x03)) break;
+        }		
+		
 		switch (reg_al) {
 		case 0x00:							/* SET SINGLE PALETTE REGISTER */
 			INT10_SetSinglePaletteRegister(reg_bl,reg_bh);
@@ -306,12 +316,27 @@ graphics_chars:
 		}
 		break;
 	case 0x12:								/* alternate function select */
-		if (!IS_EGAVGA_ARCH) 
+		if (!IS_EGAVGA_ARCH && machine != MCH_MCGA) 
 			break;
 		switch (reg_bl) {
 		case 0x10:							/* Get EGA Information */
 			reg_bh=(real_readw(BIOSMEM_SEG,BIOSMEM_CRTC_ADDRESS)==0x3B4);	
-			reg_bl=3;	//256 kb
+			if (IS_EGA_ARCH) {
+				if (vga.vmemsize >= (256*1024))
+					reg_bl=3; //256 kb
+				else if (vga.vmemsize >= (192*1024))
+					reg_bl=2; //192 kb
+				else if (vga.vmemsize >= (128*1024))
+					reg_bl=1; //128 kb
+				else
+					reg_bl=0; //64 kb
+			}
+            else if (machine == MCH_MCGA) {
+                reg_bl=0;	//64 kb
+            }
+			else {
+				reg_bl=3; //256 kb
+			}
 			reg_cl=real_readb(BIOSMEM_SEG,BIOSMEM_SWITCHES) & 0x0F;
 			reg_ch=real_readb(BIOSMEM_SEG,BIOSMEM_SWITCHES) >> 4;
 			break;
@@ -465,7 +490,7 @@ CX	640x480	800x600	  1024x768/1280x1024
 		INT10_WriteString(reg_dh,reg_dl,reg_al,reg_bl,SegPhys(es)+reg_bp,reg_cx,reg_bh);
 		break;
 	case 0x1A:								/* Display Combination */
-		if (!IS_VGA_ARCH) break;
+		if (!IS_VGA_ARCH && machine != MCH_MCGA) break;
 		if (reg_al<2) {
 			INT10_DisplayCombinationCode(&reg_bx,(reg_al==1));
 			reg_ax=0x1A;	// high part destroyed or zeroed depending on BIOS

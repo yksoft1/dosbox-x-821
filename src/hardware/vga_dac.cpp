@@ -84,6 +84,14 @@ void VGA_DAC_UpdateColor( Bitu index ) {
     if (IS_EGA_ARCH) {
         VGA_DAC_SendColor( index, index );
     }
+	else if (machine == MCH_MCGA) {
+		if (vga.mode == M_VGA || vga.mode == M_LIN8)
+			maskIndex = index & vga.dac.pel_mask;
+		else
+			maskIndex = vga.dac.combine[index&0xF] & vga.dac.pel_mask;
+
+		VGA_DAC_SendColor( index, maskIndex );
+	}
     else {
         switch (vga.mode) {
             case M_VGA:
@@ -117,6 +125,10 @@ void write_p3c6(Bitu port,Bitu val,Bitu iolen) {
 	if ( vga.dac.pel_mask != val ) {
 		LOG(LOG_VGAMISC,LOG_NORMAL)("VGA:DCA:Pel Mask set to %X", (int)val);
 		vga.dac.pel_mask = val;
+		
+		// TODO: MCGA 640x480 2-color mode appears to latch the DAC at retrace
+		//       for background/foreground. Does that apply to the PEL mask too?
+		
 		VGA_DAC_UpdateColorPalette();
 	}
 }
@@ -170,24 +182,35 @@ void write_p3c9(Bitu port,Bitu val,Bitu iolen) {
 		break;
 	case 2:
 		vga.dac.rgb[vga.dac.write_index].blue=val;
-		switch (vga.mode) {
-		case M_VGA:
-		case M_LIN8:
-			VGA_DAC_UpdateColor( vga.dac.write_index );
-			if ( GCC_UNLIKELY( vga.dac.pel_mask != 0xff)) {
-				Bitu index = vga.dac.write_index;
-				if ( (index & vga.dac.pel_mask) == index ) {
-					for ( Bitu i = index+1;i<256;i++) 
-						if ( (i & vga.dac.pel_mask) == index )
-							VGA_DAC_UpdateColor( i );
-				}
-			} 
-			break;
-		default:
-			/* Check for attributes and DAC entry link */
-			for (Bitu i=0;i<16;i++) {
-				if (vga.dac.combine[i]==vga.dac.write_index) {
-					VGA_DAC_SendColor( i, vga.dac.write_index );
+		// As seen on real hardware: 640x480 2-color is the ONLY video mode
+        // where the MCGA hardware appears to latch foreground and background
+        // colors from the DAC at retrace, instead of always reading through
+        // the DAC.
+        //
+        // Perhaps IBM couldn't get the DAC to run fast enough for 640x480 2-color mode.
+        if (machine == MCH_MCGA && (vga.other.mcga_mode_control & 2)) {
+            /* do not update the palette right now.
+             * MCGA double-buffers foreground and background colors */
+        } else {
+			switch (vga.mode) {
+			case M_VGA:
+			case M_LIN8:
+				VGA_DAC_UpdateColor( vga.dac.write_index );
+				if ( GCC_UNLIKELY( vga.dac.pel_mask != 0xff)) {
+					Bitu index = vga.dac.write_index;
+					if ( (index & vga.dac.pel_mask) == index ) {
+						for ( Bitu i = index+1;i<256;i++) 
+							if ( (i & vga.dac.pel_mask) == index )
+								VGA_DAC_UpdateColor( i );
+					}
+				} 
+				break;
+			default:
+				/* Check for attributes and DAC entry link */
+				for (Bitu i=0;i<16;i++) {
+					if (vga.dac.combine[i]==vga.dac.write_index) {
+						VGA_DAC_SendColor( i, vga.dac.write_index );
+					}
 				}
 			}
 		}
@@ -228,14 +251,19 @@ Bitu read_p3c9(Bitu port,Bitu iolen) {
 void VGA_DAC_CombineColor(Bit8u attr,Bit8u pal) {
 	/* Check if this is a new color */
 	vga.dac.combine[attr]=pal;
-	switch (vga.mode) {
-	case M_LIN8:
-		break;
-	case M_VGA:
-		// used by copper demo; almost no video card seems to support it
-		// Update: supported by ET4000AX (and not by ET4000AF)
-	default:
-		VGA_DAC_SendColor( attr, pal );
+	
+	if (machine == MCH_MCGA) {
+        VGA_DAC_UpdateColor( attr );
+    } else {
+		switch (vga.mode) {
+		case M_LIN8:
+			break;
+		case M_VGA:
+			// used by copper demo; almost no video card seems to support it
+			// Update: supported by ET4000AX (and not by ET4000AF)
+		default:
+			VGA_DAC_SendColor( attr, pal );
+		}
 	}
 }
 
@@ -259,7 +287,7 @@ void VGA_SetupDAC(void) {
 	vga.dac.write_index=0;
 	vga.dac.hidac_counter=0;
 	vga.dac.reg02=0;
-	if (IS_VGA_ARCH) {
+	if (IS_VGA_ARCH || machine == MCH_MCGA) {
 		/* Setup the DAC IO port Handlers */
 		if (svga.setup_dac) {
 			svga.setup_dac();
