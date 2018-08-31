@@ -24,6 +24,7 @@
 #include "regs.h"
 #include "control.h"
 #include "shell.h"
+#include "cpu.h"
 #include "callback.h"
 #include "support.h"
 #include "builtin.h"
