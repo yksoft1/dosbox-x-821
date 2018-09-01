@@ -609,13 +609,15 @@ void Mouse_CursorMoved(float xrel,float yrel,float x,float y,bool emulate) {
 	if (mouse.y > mouse.max_y) mouse.y = mouse.max_y;
 	if (mouse.y < mouse.min_y) mouse.y = mouse.min_y;
 
-	mouse.ps2x += xrel;
-	mouse.ps2y += yrel;
-	if (mouse.ps2x >= 32768.0)       mouse.ps2x -= 65536.0;
-	else if (mouse.ps2x <= -32769.0) mouse.ps2x += 65536.0;
-	if (mouse.ps2y >= 32768.0)       mouse.ps2y -= 65536.0;
-	else if (mouse.ps2y <= -32769.0) mouse.ps2y += 65536.0;
-
+	if (user_cursor_locked) {
+		mouse.ps2x += xrel;
+		mouse.ps2y += yrel;
+		if (mouse.ps2x >= 32768.0)       mouse.ps2x -= 65536.0;
+		else if (mouse.ps2x <= -32769.0) mouse.ps2x += 65536.0;
+		if (mouse.ps2y >= 32768.0)       mouse.ps2y -= 65536.0;
+		else if (mouse.ps2y <= -32769.0) mouse.ps2y += 65536.0;
+	}
+	
 	Mouse_AddEvent(MOUSE_HAS_MOVED);
 }
 
