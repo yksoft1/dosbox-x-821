@@ -47,6 +47,7 @@ void AUX_INT33_Takeover();
 int KEYBOARD_AUX_Active();
 void KEYBOARD_AUX_Event(float x,float y,Bitu buttons,int scrollwheel);
 
+extern bool user_cursor_locked;
 bool en_int33=false;
 bool en_bios_ps2mouse=false;
 bool cell_granularity_disable=false;
