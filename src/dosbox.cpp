@@ -886,6 +886,9 @@ void DOSBOX_SetupConfigSections(void) {
 		"none", "cs_equ_ds", 0
 	};
 
+	const char* irqhandler[] = {
+		"", "simple", "mask_isr", 0 };
+
 	/* Setup all the different modules making up DOSBox */
 	const char* machines[] = {
 		"hercules", "cga", "cga_mono", "cga_rgb", "cga_composite", "cga_composite2", "tandy", "pcjr", "ega",
@@ -1067,6 +1070,13 @@ void DOSBOX_SetupConfigSections(void) {
 			  "  std25                        25MHz\n"
 			  "  <integer or float>           Any integer or floating point value will be used as the clock frequency in Hz\n"
 			  "  <integer/integer ratio>      If a ratio is given (num/den), the ratio will be used as the clock frequency");
+
+	Pstring = secprop->Add_string("unhandled irq handler",Property::Changeable::WhenIdle,"");
+	Pstring->Set_values(irqhandler);
+	Pstring->Set_help("Determines how unhandled IRQs are handled. This may help some errant DOS applications.\n"
+                     	"Leave unset for default behavior (simple).\n"
+                     	"simple               Acknowledge the IRQ, and the master (if slave IRQ)\n"
+						"mask_isr             Acknowledge IRQs in service on master and slave and mask IRQs still in service, to deal with errant handlers (em-dosbox method)");
 
 	Pint = secprop->Add_int("rom bios allocation max",Property::Changeable::OnlyAtStart,0);
 	Pint->SetMinMax(0,128);
