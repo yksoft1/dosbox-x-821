@@ -1336,6 +1336,13 @@ void DOSBOX_SetupConfigSections(void) {
 
 	Pbool = secprop->Add_bool("enable pc nmi mask",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Enable PC/XT style NMI mask register (0xA0). Note that this option conflicts with the secondary PIC and will be ignored if the slave PIC is enabled.");
+	
+#ifndef EMSCRIPTEN
+	Pbool = secprop->Add_bool("rom bios startup screen",Property::Changeable::Always,true);
+#else
+	Pbool = secprop->Add_bool("rom bios startup screen",Property::Changeable::Always,false);
+#endif
+	Pbool->Set_help("Enable or disable Dosbox-X's POST screen.");
 
 	Pbool = secprop->Add_bool("rom bios 8x8 CGA font",Property::Changeable::Always,true);
 	Pbool->Set_help("If set, or mainline compatible bios mapping, a legacy 8x8 CGA font (first 128 characters) is stored at 0xF000:0xFA6E. DOS programs that do not use INT 10h to locate fonts might require that font to be located there.");

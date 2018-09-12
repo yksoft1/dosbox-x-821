@@ -95,6 +95,8 @@ RegionAllocTracking				rombios_alloc;
 Bitu						rombios_minimum_location = 0xF0000; /* minimum segment allowed */
 Bitu						rombios_minimum_size = 0x10000;
 
+bool enable_startup_screen = true;
+
 bool MEM_map_ROM_physmem(Bitu start,Bitu end);
 bool MEM_unmap_physmem(Bitu start,Bitu end);
 
@@ -4401,6 +4403,8 @@ private:
              *              with 31khz hsync support (SUPPORT_CRT31KHZ) */
 		}
 		
+		
+		
 		if (cpu.pmode) E_Exit("BIOS error: POST function called while in protected/vm86 mode");
 
 		CPU_CLI();
@@ -5406,6 +5410,7 @@ public:
 		{ // TODO: Eventually, move this to BIOS POST or init phase
 			Section_prop * section=static_cast<Section_prop *>(control->GetSection("dosbox"));
 
+			enable_startup_screen=section->Get_bool("rom bios startup screen");
 			bochs_port_e9 = section->Get_bool("bochs debug port e9");
 
 			// TODO: motherboard init, especially when we get around to full Intel Triton/i440FX chipset emulation
@@ -5589,7 +5594,10 @@ public:
 		cb_bios_post.Install(&cb_bios_post__func,CB_RETF,"BIOS POST");
 		cb_bios_scan_video_bios.Install(&cb_bios_scan_video_bios__func,CB_RETF,"BIOS Scan Video BIOS");
 		cb_bios_adapter_rom_scan.Install(&cb_bios_adapter_rom_scan__func,CB_RETF,"BIOS Adapter ROM scan");
-		cb_bios_startup_screen.Install(&cb_bios_startup_screen__func,CB_RETF,"BIOS Startup screen");
+		
+		if (enable_startup_screen)
+			cb_bios_startup_screen.Install(&cb_bios_startup_screen__func,CB_RETF,"BIOS Startup screen");
+		
 		cb_bios_boot.Install(&cb_bios_boot__func,CB_RETF,"BIOS BOOT");
 		cb_bios_bootfail.Install(&cb_bios_bootfail__func,CB_RETF,"BIOS BOOT FAIL");
 		cb_pc98_rombasic.Install(&cb_pc98_entry__func,CB_RETF,"N88 ROM BASIC");
@@ -5618,13 +5626,15 @@ public:
 			phys_writeb(wo+0x01,(Bit8u)0x38);						//Extra Callback instruction
 			phys_writew(wo+0x02,(Bit16u)cb_bios_adapter_rom_scan.Get_callback());		//The immediate word
 			wo += 4;
-
-			// startup screen
-			phys_writeb(wo+0x00,(Bit8u)0xFE);						//GRP 4
-			phys_writeb(wo+0x01,(Bit8u)0x38);						//Extra Callback instruction
-			phys_writew(wo+0x02,(Bit16u)cb_bios_startup_screen.Get_callback());		//The immediate word
-			wo += 4;
-
+			
+			if (enable_startup_screen) {
+				// startup screen
+				phys_writeb(wo+0x00,(Bit8u)0xFE);						//GRP 4
+				phys_writeb(wo+0x01,(Bit8u)0x38);						//Extra Callback instruction
+				phys_writew(wo+0x02,(Bit16u)cb_bios_startup_screen.Get_callback());		//The immediate word
+				wo += 4;
+			}
+			
 			// boot
             BIOS_boot_code_offset = wo;
 			phys_writeb(wo+0x00,(Bit8u)0xFE);						//GRP 4
