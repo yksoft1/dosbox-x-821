@@ -1547,7 +1547,7 @@ public:
 			return pc98_mem_msw((addr >> 2) & 7);
 		}
 		
-		/* 0xA4000-0xA401F is word-sized access to the character generator.
+		/* 0xA4000-0xA4FFF is word-sized access to the character generator.
 		 *
 		 * Some games, though not many, appear to prefer this memory-mapped I/O
 		 * rather than the I/O ports.
@@ -1559,12 +1559,9 @@ public:
 		 * PC9821 laptop reveals that the BIOS also uses this method,
 		 * using REP MOVSW
 		 *
-		 * TODO: It's not clear if only 0xA4000-0xA401F is involved or if a wider
-		 * range is involved (meaning that the hardware latches A4000-A5FFF
-		 * to this function and then decodes only the low bits).
-		 *
-		 * CHECK REAL HARDWARE to answer this question. */
-		if ((addr & (~0x1F)) == 0xA4000) {
+		 * Also noted: On real hardware, A4000-A4FFF seems to latch to the CG.
+		 *             A5000-A5FFF seems to latch to nothing. */
+		if ((addr & (~0xFFF)) == 0xA4000) {
 			extern uint16_t a1_font_load_addr;
 			
 			// TODO: Does the memory address update the char offset value written to the I/O port version?
@@ -1664,7 +1661,7 @@ public:
         else
             addr &= 0x1FFFF;
 
-		/* 0xA4000-0xA401F is word-sized access to the character generator.
+		/* 0xA4000-0xA4FFF is word-sized access to the character generator.
 		 *
 	 	 * Some games, though not many, appear to prefer this memory-mapped I/O
 		 * rather than the I/O ports.
@@ -1676,12 +1673,9 @@ public:
 		 * PC9821 laptop reveals that the BIOS also uses this method,
 		 * using REP MOVSW
 		 *
-		 * TODO: It's not clear if only 0xA4000-0xA401F is involved or if a wider
-		 * range is involved (meaning that the hardware latches A4000-A5FFF
-		 * to this function and then decodes only the low bits).
-		 *
-		 * CHECK REAL HARDWARE to answer this question. */
-		if ((addr & (~0x1F)) == 0xA4000) {
+		 * Also noted: On real hardware, A4000-A4FFF seems to latch to the CG.
+		 *             A5000-A5FFF seems to latch to nothing. */
+		if ((addr & (~0xFFF)) == 0xA4000) {
 			extern uint16_t a1_font_load_addr;
 			
 			// TODO: Does the memory address update the char offset value written to the I/O port version?
