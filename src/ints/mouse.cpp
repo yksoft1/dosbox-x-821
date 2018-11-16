@@ -282,8 +282,6 @@ Bitu PS2_Handler(void) {
 #define MOUSE_DUMMY 128
 #define MOUSE_DELAY 5.0
 
-extern bool p7fd8_8255_mouse_irq_signal;
-
 void MOUSE_Limit_Events(Bitu /*val*/) {
 	mouse.timer_in_progress = false;
 
@@ -297,10 +295,7 @@ void MOUSE_Limit_Events(Bitu /*val*/) {
 		mouse.timer_in_progress = true;
 		PIC_AddEvent(MOUSE_Limit_Events,MOUSE_DELAY);
 		
-		if (IS_PC98_ARCH)
-			p7fd8_8255_mouse_irq_signal = true;
-
-        if (!IS_PC98_ARCH || (IS_PC98_ARCH && p7fd8_8255_mouse_int_enable))
+        if (!IS_PC98_ARCH)
 		    PIC_ActivateIRQ(MOUSE_IRQ);
 	}
 }
@@ -323,11 +318,8 @@ INLINE void Mouse_AddEvent(Bit8u type) {
 	if (!mouse.timer_in_progress) {
 		mouse.timer_in_progress = true;
 		PIC_AddEvent(MOUSE_Limit_Events,MOUSE_DELAY);
-		
-		if (IS_PC98_ARCH)
-			p7fd8_8255_mouse_irq_signal = true;
 
-        if (!IS_PC98_ARCH || (IS_PC98_ARCH && p7fd8_8255_mouse_int_enable))
+        if (!IS_PC98_ARCH)
             PIC_ActivateIRQ(MOUSE_IRQ);
     }
 }
@@ -770,7 +762,7 @@ static void Mouse_ResetHardware(void){
 	PIC_SetIRQMask(MOUSE_IRQ,false);
 
     if (IS_PC98_ARCH)
-        p7fd8_8255_mouse_int_enable = 1;
+        IO_WriteB(0x7FDD,IO_ReadB(0x7FDD) & (~0x10)); // remove interrupt inhibit
 }
 
 //Does way to much. Many things should be moved to mouse reset one day
