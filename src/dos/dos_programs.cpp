@@ -1300,7 +1300,14 @@ public:
                     }
                 }	
 				
-				if ((ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) || pc98_sect128) {
+				if (drive >= 'C') {
+                    /* hard drive */
+                    mem_writeb(0x584,0xA0/*type*/ + (drive - 'C')/*drive*/);
+                    mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
+                    mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
+                    mem_writeb(0x482,scsi_equip);
+                }
+				else if ((ssize == 1024 && heads == 2 && cyls == 77 && sects == 8) || pc98_sect128) {
 					mem_writeb(0x584,0x90/*type*/ + (drive - 65)/*drive*/); /* 1.2MB 3-mode */
 					mem_writew(0x55C,disk_equip); /* disk equipment (drive 0 is present) */
 					mem_writew(0x5AE,disk_equip_144); /* disk equipment (drive 0 is present, 1.44MB) */
@@ -1312,14 +1319,7 @@ public:
 					mem_writew(0x5AE,disk_equip_144); /* disk equipment (drive 0 is present, 1.44MB) */
 					mem_writeb(0x482,scsi_equip);
 				}
-				/* TODO: 640KB? */
-				else if (drive >= 'C') {
-                    /* hard drive */
-                    mem_writeb(0x584,0xA0/*type*/ + (drive - 'C')/*drive*/);
-                    mem_writew(0x55C,disk_equip);   /* disk equipment (drive 0 is present) */
-                    mem_writew(0x5AE,disk_equip_144);   /* disk equipment (drive 0 is present, 1.44MB) */
-                    mem_writeb(0x482,scsi_equip);
-                }
+				/* TODO: 640KB? */ 
 				else {
                     // FIXME
 					LOG_MSG("PC-98 boot: Unable to determine boot drive type for ssize=%u heads=%u cyls=%u sects=%u. Guessing.",
