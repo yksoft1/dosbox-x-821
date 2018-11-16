@@ -151,6 +151,9 @@ extern Bitu dosbox_check_nonrecursive_pf_cs;
 extern Bitu dosbox_check_nonrecursive_pf_eip;
 
 Bits CPU_Core_Normal_Run(void) {
+    if (CPU_Cycles <= 0)
+		return CBRET_NONE;
+		
 	while (CPU_Cycles-->0) {
 		LOADIP;
 		dosbox_check_nonrecursive_pf_cs = SegValue(cs);
