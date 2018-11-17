@@ -27,6 +27,8 @@
 
 #define PIC_QUEUESIZE 512
 
+bool ignore_cascade_in_service = false;
+
 struct PIC_Controller {
 	Bitu icw_words;
 	Bitu icw_index;
@@ -42,6 +44,7 @@ struct PIC_Controller {
 	Bit8u imrr;       // mask register reversed (makes bit tests simpler)
 	Bit8u isr;        // in service register
 	Bit8u isrr;       // in service register reversed (makes bit tests simpler)
+	Bit8u isr_ignore; // in service bits to ignore
 	Bit8u active_irq; //currently active irq
 
 
@@ -57,26 +60,18 @@ struct PIC_Controller {
 		if(isr == 0) {active_irq = 8; return;}
 		for(Bit8u i = 0, s = 1; i < 8;i++, s<<=1){
 			if( isr & s){
+                if (isr_ignore & s)
+                     continue;			
+			
 				active_irq = i;
 				return;
 			}
 		}
+		
+        active_irq = 8;		
 	}
 
-	void check_for_irq(){
-		const Bit8u possible_irq = (irr&imrr)&isrr;
-		if (possible_irq) {
-			const Bit8u a_irq = special?8:active_irq;
-			for(Bit8u i = 0, s = 1; i < a_irq;i++, s<<=1){
-				if ( possible_irq & s ) {
-					//There is an irq ready to be served => signal master and/or cpu
-					activate();
-					return;
-				}
-			}
-		}
-		deactivate(); //No irq, remove signal to master and/or cpu
-	}
+	void check_for_irq();
 
 	//Signals master/cpu that there is an irq ready.
 	void activate();
@@ -84,15 +79,7 @@ struct PIC_Controller {
 	//Removes signal to master/cpu that there is an irq ready.
 	void deactivate();
 
-	void raise_irq(Bit8u val){
-		Bit8u bit = 1 << (val);
-		if((irr & bit)==0) { //value changed (as it is currently not active)
-			irr|=bit;
-			if((bit&imrr)&isrr) { //not masked and not in service
-				if(special || val < active_irq) activate();
-			}
-		}
-	}
+	void raise_irq(Bit8u val);
 
 	void lower_irq(Bit8u val){
 		Bit8u bit = 1 << ( val);
@@ -119,6 +106,36 @@ Bitu PIC_IRQCheck = 0; //Maybe make it a bool and/or ensure 32bit size (x86 dyna
 bool enable_slave_pic = true; /* if set, emulate slave with cascade to master. if clear, emulate only master, and no cascade (IRQ 2 is open) */
 bool enable_pc_xt_nmi_mask = false;
 
+void PIC_Controller::check_for_irq(){
+    const Bit8u possible_irq = (irr&imrr)&isrr;
+    if (possible_irq) {
+        Bit8u a_irq = special?8:active_irq;
+
+        if (ignore_cascade_in_service && this == &master && a_irq == (unsigned char)master_cascade_irq)
+            a_irq++;
+
+        for(Bit8u i = 0, s = 1; i < a_irq;i++, s<<=1){
+            if ( possible_irq & s ) {
+                //There is an irq ready to be served => signal master and/or cpu
+                activate();
+                return;
+            }
+        }
+    }
+    deactivate(); //No irq, remove signal to master and/or cpu
+}
+
+void PIC_Controller::raise_irq(Bit8u val){
+    Bit8u bit = 1 << (val);
+    if((irr & bit)==0) { //value changed (as it is currently not active)
+        irr|=bit;
+        if((bit&imrr)&isrr) { //not masked and not in service
+            if(special || val < active_irq) activate();
+            else if (ignore_cascade_in_service && this == &master && val == (unsigned char)master_cascade_irq) activate();
+        }
+    }
+}
+ 
 void PIC_Controller::set_imr(Bit8u val) {
 	Bit8u change = (imr) ^ (val); //Bits that have changed become 1.
 	imr  =  val;
@@ -172,7 +189,7 @@ void PIC_Controller::start_irq(Bit8u val){
 	if (!auto_eoi) {
 		active_irq = val;
 		isr |= 1<<(val);
-		isrr = ~isr;
+		isrr = (~isr) | isr_ignore;
 	} else if (GCC_UNLIKELY(rotate_on_auto_eoi)) {
 		LOG_MSG("rotate on auto EOI not handled");
 	}
@@ -219,14 +236,14 @@ static void write_command(Bitu port,Bitu val,Bitu iolen) {
 			if (GCC_UNLIKELY(val&0x80)) LOG_MSG("rotate mode not supported");
 			if (val&0x40) {		// specific EOI
 				pic->isr &= ~(1<< ((val-0x60)));
-				pic->isrr = ~pic->isr;
+				pic->isrr = (~pic->isr) | pic->isr_ignore;
 				pic->check_after_EOI();
 //				if (val&0x80);	// perform rotation
 			} else {		// nonspecific EOI
 				if (pic->active_irq != 8) { 
 					//If there is no irq in service, ignore the call, some games send an eoi to both pics when a sound irq happens (regardless of the irq).
 					pic->isr &= ~(1 << (pic->active_irq));
-					pic->isrr = ~pic->isr;
+					pic->isrr = (~pic->isr) | pic->isr_ignore;
 					pic->check_after_EOI();
 				}
 //				if (val&0x80);	// perform rotation
@@ -444,9 +461,12 @@ void PIC_runIRQs(void) {
 	if (GCC_UNLIKELY(CPU_NMI_active) || GCC_UNLIKELY(CPU_NMI_pending)) return; /* NMI has higher priority than PIC */
 
 	const Bit8u p = (master.irr & master.imrr)&master.isrr;
-	const Bit8u max = master.special?8:master.active_irq;
+	Bit8u max = master.special?8:master.active_irq;
 	Bit8u i,s;
 
+    if (ignore_cascade_in_service && max == (unsigned char)master_cascade_irq)
+         max++;
+		 
 	for (i = 0,s = 1;i < max;i++, s<<=1){
 		if (p&s) {
 			if (PIC_IRQ_hax[i] == PIC_irq_hack_cs_equ_ds)
@@ -737,6 +757,7 @@ void PIC_Reset(Section *sec) {
 	enable_pc_xt_nmi_mask = section->Get_bool("enable pc nmi mask");
     PIC_irq_delay = section->Get_int("irq delay");
     if (PIC_irq_delay < 0) PIC_irq_delay = 2; /* default */
+	ignore_cascade_in_service = section->Get_bool("cascade interrupt ignore in service");
 	
 	if (enable_slave_pic)
 		master_cascade_irq = IS_PC98_ARCH ? 7 : 2;
@@ -759,6 +780,7 @@ void PIC_Reset(Section *sec) {
 		pics[i].icw_words=0;
 		pics[i].irr = pics[i].isr = pics[i].imrr = 0;
 		pics[i].isrr = pics[i].imr = 0xff;
+		pics[i].isr_ignore = 0x00;
 		pics[i].active_irq = 8;
 	}
 
@@ -794,9 +816,12 @@ void PIC_Reset(Section *sec) {
 	PIC_SetIRQMask(1,false);					/* Enable system timer */
 	PIC_SetIRQMask(8,false);					/* Enable RTC IRQ */
 
-	if (master_cascade_irq >= 0)
+	if (master_cascade_irq >= 0) {
 		PIC_SetIRQMask(master_cascade_irq,false);/* Enable second pic */
-
+		
+        if (ignore_cascade_in_service)
+             pics[0].isr_ignore |= 1u << (unsigned char)master_cascade_irq;
+    }		
     /* I/O port map
      *
      * IBM PC/XT/AT     NEC PC-98        A0
