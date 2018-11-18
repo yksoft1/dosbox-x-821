@@ -920,6 +920,7 @@ public:
 
 				/* attach directly without using the swap list */
 				if (imageDiskList[drive-65] != NULL) {
+					imageDiskChange[drive-65] = true;
 					imageDiskList[drive-65]->Release();
 					imageDiskList[drive-65] = NULL;
 				}
@@ -948,6 +949,10 @@ public:
             return;
         }
 
+        /* clear the disk change flag.
+         * Most OSes don't expect the disk change error signal when they first boot up */
+        imageDiskChange[drive-65] = false;
+		 
 		bool has_read = false;
 		bool pc98_sect128 = false;
 		unsigned int bootsize = imageDiskList[drive-65]->getSectSize();
@@ -2919,6 +2924,7 @@ private:
 				if (index > 1) IDE_Hard_Disk_Detach(index);
 				imageDiskList[index]->Release();
 				imageDiskList[index] = NULL;
+				imageDiskChange[index] = true;
 				return true;
 			}
 			WriteOut("No drive loaded at specified point\n");
@@ -3354,6 +3360,7 @@ private:
 			imageDiskList[bios_drive_index]->Release();
 		}
 		imageDiskList[bios_drive_index] = image;
+		imageDiskChange[bios_drive_index] = true;
 		image->Addref();
 
 		// let FDC know if we mounted a floppy
@@ -3429,6 +3436,7 @@ private:
 					if (index > 1) IDE_Hard_Disk_Detach(index);
 					//todo: check this code
 					imageDiskList[index]->Release();
+					imageDiskChange[index] = true;
 					imageDiskList[index] = NULL;
 				}
 			}
