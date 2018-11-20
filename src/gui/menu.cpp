@@ -2473,21 +2473,21 @@ void MSG_Loop(void) {
 			case ID_SHOWCONSOLE: DOSBox_ShowConsole(); break;
 			case ID_PC98_4MHZ_TIMER:
 			{
-				void TIMER_OnEnterPC98_Phase2(Section*);
+				void TIMER_OnPowerOn(Section*);
 				void TIMER_OnEnterPC98_Phase2_UpdateBDA(void);
 				Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 				dosbox_section->HandleInputline("pc-98 timer master frequency=4");
-				TIMER_OnEnterPC98_Phase2(NULL);
+				TIMER_OnPowerOn(NULL);
 				TIMER_OnEnterPC98_Phase2_UpdateBDA();
 				break;
 			}
 			case ID_PC98_5MHZ_TIMER:
 			{
-				void TIMER_OnEnterPC98_Phase2(Section*);
+				void TIMER_OnPowerOn(Section*);
 				void TIMER_OnEnterPC98_Phase2_UpdateBDA(void);
 				Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 				dosbox_section->HandleInputline("pc-98 timer master frequency=5");
-				TIMER_OnEnterPC98_Phase2(NULL);
+				TIMER_OnPowerOn(NULL);
 				TIMER_OnEnterPC98_Phase2_UpdateBDA();
 				break;
 			}
