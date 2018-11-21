@@ -21,9 +21,11 @@
 using namespace std;
 
 extern bool gdc_5mhz_mode;
+extern bool enable_pc98_grcg;
 extern bool enable_pc98_egc;
 
 void gdc_5mhz_mode_update_vars(void);
+void gdc_grcg_enable_update_vars(void);
 void gdc_egc_enable_update_vars(void);
 
 /* ====================== PC98UTIL.COM ====================== */
@@ -42,6 +44,10 @@ public:
             }
             else if (arg == "egc") {
                 enable_pc98_egc = true;
+ 				if (!enable_pc98_grcg) { //Enable GRCG if not enabled
+ 					enable_pc98_grcg = true;
+ 					gdc_grcg_enable_update_vars();
+ 				}				
                 WriteOut("EGC graphics functions enabled\n");
                 gdc_egc_enable_update_vars();
 #if defined(WIN32) && !defined(C_SDL2)
