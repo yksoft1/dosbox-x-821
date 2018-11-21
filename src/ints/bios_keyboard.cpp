@@ -1241,7 +1241,7 @@ static Bitu IRQ1_Handler_PC98(void) {
             case 0x6A: // F9            f?9     ???     ???     ???     ???
             case 0x6B: // F10           f?10    ???     ???     ???     ???
                 if (pressed) {
-                    if (modflags & 4) /* CTRL */
+                    if (modflags & 0x10) /* CTRL */
                         add_key(scan_add + 0x3000); /* 0x92-0x9B */
                     else if (modflags & 1) /* SHIFT */
                         add_key(scan_add + 0x2000); /* 0x82-0x8B */
