@@ -3,6 +3,16 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# autoconfig nonsense
+*.in
+aclocal.m4
+configure
+config.guess
+config.sub
+install-sh
+missing
+depcomp
+
 # User-specific files
 *.suo
 *.user
@@ -12,8 +22,12 @@
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
+# subgit
+subgit
+subgit/*
+
 # Build results
-[Dd]ebug/
+# Debug/
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
@@ -322,10 +336,44 @@ windows-installer/DOSBox-X-setup-*.zip
 *.deps
 dosbox-x
 Makefile
-*.in
-aclocal.m4
-configure
 
-!vs2015/
+doxygen
+doxygen/*
 
+vs2015/sdl/linux-host
+vs2015/sdl/linux-host/*
 
+vs2015/sdl/linux-build
+vs2015/sdl/linux-build/*
+
+vs2015/sdl/include/SDL_config.h
+
+/vs2015/libpdcurses/wincon/xmas.exe
+/vs2015/libpdcurses/wincon/worm.exe
+/vs2015/libpdcurses/wincon/tuidemo.exe
+/vs2015/libpdcurses/wincon/testcurs.exe
+/vs2015/libpdcurses/wincon/rain.exe
+/vs2015/libpdcurses/wincon/ptest.exe
+/vs2015/libpdcurses/wincon/pdcurses.lib
+/vs2015/libpdcurses/wincon/ozdemo.exe
+/vs2015/libpdcurses/wincon/firework.exe
+/vs2015/libpdcurses/wincon/xmas.exe
+/vs2015/libpdcurses/wincon/worm.exe
+/vs2015/libpdcurses/wincon/tuidemo.exe
+/vs2015/libpdcurses/wincon/testcurs.exe
+/vs2015/libpdcurses/wincon/rain.exe
+/vs2015/libpdcurses/wincon/ptest.exe
+/vs2015/libpdcurses/wincon/pdcurses.lib
+/vs2015/libpdcurses/wincon/ozdemo.exe
+/vs2015/libpdcurses/wincon/firework.exe
+/vs2015/libpdcurses/wincon/xmas.exe
+/vs2015/libpdcurses/wincon/worm.exe
+/vs2015/libpdcurses/wincon/tuidemo.exe
+/vs2015/libpdcurses/wincon/testcurs.exe
+/vs2015/libpdcurses/wincon/rain.exe
+/vs2015/libpdcurses/wincon/ptest.exe
+/vs2015/libpdcurses/wincon/pdcurses.lib
+/vs2015/libpdcurses/wincon/ozdemo.exe
+/vs2015/libpdcurses/wincon/firework.exe
+
+dosbox-x.exe
