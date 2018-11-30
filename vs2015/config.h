@@ -51,11 +51,13 @@
 #ifdef _M_AMD64 /* Microsoft C++ amd64 */
 # undef C_DYNAMIC_X86
 # undef C_TARGETCPU
+# define C_DYNREC 1
 #else
 /* The type of cpu this target has */
 #define C_TARGETCPU X86
 /* Define to 1 to use x86 dynamic cpu core */
 # define C_DYNAMIC_X86			1
+# undef C_DYNREC
 #endif
 
 /* Define to 1 to enable fluidsynth MIDI synthesis */
@@ -203,7 +205,11 @@
 /* Define to the version of this package. */
 
 /* The size of `int *', as computed by sizeof. */
-#define SIZEOF_INT_P				4
+#ifdef _M_AMD64 /* Microsoft C++ amd64 */
+# define SIZEOF_INT_P				8
+#else
+# define SIZEOF_INT_P				4
+#endif
 
 /* The size of `unsigned char', as computed by sizeof. */
 #define SIZEOF_UNSIGNED_CHAR		1
