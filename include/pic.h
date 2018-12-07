@@ -46,6 +46,8 @@ enum PIC_irq_hacks PIC_parse_IRQ_hack_string(const char *str);
 extern Bitu PIC_IRQCheck;
 extern Bitu PIC_Ticks;
 
+double PIC_GetCurrentEventTime(void);
+
 static INLINE float PIC_TickIndex(void) {
 	return (CPU_CycleMax-CPU_CycleLeft-CPU_Cycles)/(float)CPU_CycleMax;
 }
