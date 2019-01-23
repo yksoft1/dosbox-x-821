@@ -733,3 +733,6 @@
 #define ID_PC98_CLEAR_GRAPHICS_LAYER 831
 
 #define ID_SHOWCONSOLE 840
+
+#define ID_SWAPIMG		                841
+#define ID_SWAPCD		                842

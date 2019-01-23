@@ -1679,6 +1679,18 @@ void MSG_Loop(void) {
 			case ID_SKIP_8: SetVal("render", "frameskip", "8"); break;
 			case ID_SKIP_9: SetVal("render", "frameskip", "9"); break;
 			case ID_SKIP_10: SetVal("render", "frameskip", "10"); break;
+			case ID_SWAPIMG:
+			{
+				void swapInNextDisk(bool pressed);
+				swapInNextDisk(true);
+			}
+			break;
+			case ID_SWAPCD:
+			{
+				void swapInNextCD(bool pressed);
+				swapInNextCD(true);
+			}
+			break;			
 			case ID_UMOUNT_A: UnMount('A'); break;
 			case ID_UMOUNT_B: UnMount('B'); break;
 			case ID_UMOUNT_C: UnMount('C'); break;
