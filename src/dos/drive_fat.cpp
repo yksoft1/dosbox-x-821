@@ -233,10 +233,10 @@ bool fatFile::Write(Bit8u * data, Bit16u *size) {
 			curSectOff = 0;
 			myDrive->Read_AbsoluteSector(currentSector, sectorBuffer);
 
-			newtime = false; // Guess: Writing the file supercedes any call to set DOS time, right?
-			modified = true;
 			loadedSector = true;
 		}
+		newtime = false; // Guess: Writing the file supercedes any call to set DOS time, right?
+		modified = true;
 		--sizedec;
 	}
 	if(curSectOff>0 && loadedSector) myDrive->Write_AbsoluteSector(currentSector, sectorBuffer);
