@@ -314,6 +314,9 @@ struct SDL_Block {
 		bool packed_pixel;
 		bool paletted_texture;
 		bool pixel_buffer_object;
+#if defined(C_SDL2)
+    SDL_GLContext context = NULL;
+#endif
 	} opengl;
 #endif
 	struct {
@@ -382,6 +385,11 @@ static void DOSBox_SetOriginalIcon(void) {
 #endif
 #endif
 }
+
+#if defined(C_SDL2) && defined(C_OPENGL)/*HACK*/
+void SDL_GL_SwapBuffers(void);
+#endif
+
 /* =================================================================================== */
 
 #if defined (WIN32)
@@ -553,15 +561,11 @@ bool DOSBox_Paused()
 bool pause_on_vsync = false;
 
 #if defined(C_SDL2)
-bool GFX_IsFullscreen() {
+static bool IsFullscreen() {
 	if (sdl.window == NULL) return false;
     uint32_t windowFlags = SDL_GetWindowFlags(sdl.window);
     if (windowFlags & SDL_WINDOW_FULLSCREEN_DESKTOP) return true;
     return false;
-}
-
-static bool IsFullscreen() {
-    return GFX_IsFullscreen();
 }
 #endif
 
@@ -653,7 +657,7 @@ static void SDLScreen_Reset(void) {
 }
 
 #if defined(C_SDL2)
-static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYPES screenType) {
+SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYPES screenType) {
     static SCREEN_TYPES lastType = SCREEN_SURFACE;
     if (sdl.renderer) {
         SDL_DestroyRenderer(sdl.renderer);
@@ -667,12 +671,6 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
         SDL_DestroyTexture(sdl.texture.texture);
         sdl.texture.texture=0;
     }
-#if C_OPENGL
-    if (sdl.opengl.context) {
-        SDL_GL_DeleteContext(sdl.opengl.context);
-        sdl.opengl.context=0;
-    }
-#endif
     sdl.window_desired_width = width;
     sdl.window_desired_height = height;
     int currWidth, currHeight;
@@ -684,6 +682,14 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
             return sdl.window;
         }
     }
+	
+#if C_OPENGL
+    if (sdl.opengl.context) {
+        SDL_GL_DeleteContext(sdl.opengl.context);
+        sdl.opengl.context=0;
+    }
+#endif
+
     /* If we change screen type, recreate the window. Furthermore, if
      * it is our very first time then we simply create a new window.
      */
@@ -710,6 +716,15 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
         }
         SDL_GetWindowSize(sdl.window, &currWidth, &currHeight);
         sdl.update_display_contents = ((width == currWidth) && (height == currHeight));
+		
+#if C_OPENGL
+        if (screenType == SCREEN_OPENGL) {
+            sdl.opengl.context = SDL_GL_CreateContext(sdl.window);
+            if (sdl.opengl.context == NULL) LOG_MSG("WARNING: SDL2 unable to create GL context");
+            if (SDL_GL_MakeCurrent(sdl.window, sdl.opengl.context) != 0) LOG_MSG("WARNING: SDL2 unable to make current GL context");
+        }
+#endif
+
         return sdl.window;
     }
     /* Fullscreen mode switching has its limits, and is also problematic on
@@ -736,6 +751,15 @@ static SDL_Window * GFX_SetSDLWindowMode(Bit16u width, Bit16u height, SCREEN_TYP
     /* Maybe some requested fullscreen resolution is unsupported? */
     SDL_GetWindowSize(sdl.window, &currWidth, &currHeight);
     sdl.update_display_contents = ((width == currWidth) && (height == currHeight));
+
+#if C_OPENGL
+    if (screenType == SCREEN_OPENGL) {
+        sdl.opengl.context = SDL_GL_CreateContext(sdl.window);
+        if (sdl.opengl.context == NULL) LOG_MSG("WARNING: SDL2 unable to create GL context");
+        if (SDL_GL_MakeCurrent(sdl.window, sdl.opengl.context) != 0) LOG_MSG("WARNING: SDL2 unable to make current GL context");
+    }
+#endif
+
     return sdl.window;
 }
 
@@ -923,21 +947,140 @@ void GFX_LogSDLState(void) {
 	GFX_Ashift = sdl.surface->format->Ashift;
 }
 
-#if !defined(C_SDL2)
-static SDL_Surface * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
+//#if !defined(C_SDL2)
+#if C_OPENGL
+static SDL_Surface * GFX_SetupSurfaceScaledOpenGL(Bit32u sdl_flags, Bit32u bpp) {
 	Bit16u fixedWidth;
 	Bit16u fixedHeight;
+	Bit16u windowWidth;
+	Bit16u windowHeight;
+
+retry:
+    int Voodoo_OGL_GetWidth();
+    int Voodoo_OGL_GetHeight();
+    bool Voodoo_OGL_Active();
+
+#if defined(C_SDL2)
+    if (sdl.desktop.want_type == SCREEN_OPENGL)
+        sdl_flags |= (unsigned int)SDL_WINDOW_OPENGL;
+#else
 	if (sdl.desktop.want_type == SCREEN_OPENGL) {
 		sdl_flags |= SDL_OPENGL;
 	}
+#endif
+
 	if (sdl.desktop.fullscreen) {
 		fixedWidth = sdl.desktop.full.fixed ? sdl.desktop.full.width : 0;
 		fixedHeight = sdl.desktop.full.fixed ? sdl.desktop.full.height : 0;
+#if defined(C_SDL2)
+        sdl_flags |= (unsigned int)(SDL_WINDOW_FULLSCREEN);
+#else
 		sdl_flags |= SDL_FULLSCREEN|SDL_HWSURFACE;
+#endif
 	} else {
 		fixedWidth = sdl.desktop.window.width;
 		fixedHeight = sdl.desktop.window.height;
+#if !defined(C_SDL2)
 		sdl_flags |= SDL_HWSURFACE;
+#endif
+	}
+	
+    if (fixedWidth && fixedHeight) {
+        if (render.aspect) {
+            double ratio_w=(double)fixedWidth/(sdl.draw.width*sdl.draw.scalex);
+            double ratio_h=(double)fixedHeight/(sdl.draw.height*sdl.draw.scaley);
+
+            if (ratio_w < ratio_h) {
+                sdl.clip.w=(Bit16u)fixedWidth;
+                sdl.clip.h=(Bit16u)floor((sdl.draw.height*sdl.draw.scaley*ratio_w)+0.5);
+            } else {
+                sdl.clip.w=(Bit16u)floor((sdl.draw.width*sdl.draw.scalex*ratio_h)+0.5);
+                sdl.clip.h=(Bit16u)fixedHeight;
+            }
+        }
+        else {
+            sdl.clip.w=fixedWidth;
+            sdl.clip.h=fixedHeight;
+        }
+
+		sdl.clip.x = (fixedWidth - sdl.clip.w) / 2;
+        sdl.clip.y = (fixedHeight - sdl.clip.h) / 2;
+		windowWidth = fixedWidth;
+		windowHeight = fixedHeight;
+    }
+    else {
+        sdl.clip.x=0;sdl.clip.y=0;
+		sdl.clip.w=windowWidth=(Bit16u)(sdl.draw.width*sdl.draw.scalex);
+		sdl.clip.h=windowHeight=(Bit16u)(sdl.draw.height*sdl.draw.scaley);
+    }
+
+	LOG(LOG_MISC,LOG_DEBUG)("GFX_SetSize OpenGL window=%ux%u clip=x,y,w,h=%d,%d,%d,%d",
+		(unsigned int)windowWidth,
+		(unsigned int)windowHeight,
+		(unsigned int)sdl.clip.x,
+		(unsigned int)sdl.clip.y,
+		(unsigned int)sdl.clip.w,
+		(unsigned int)sdl.clip.h);
+
+#if defined(C_SDL2)
+    sdl.surface = NULL;
+    sdl.window = GFX_SetSDLWindowMode(windowWidth, windowHeight, (sdl_flags & SDL_WINDOW_OPENGL) ? SCREEN_OPENGL : SCREEN_SURFACE);
+    if (sdl.window != NULL) sdl.surface = SDL_GetWindowSurface(sdl.window);
+#else
+	sdl.surface=SDL_SetVideoMode(windowWidth,windowHeight,bpp,sdl_flags);
+#endif
+    if (sdl.surface == NULL && sdl.desktop.fullscreen) {
+        LOG_MSG("Fullscreen not supported: %s", SDL_GetError());
+        sdl.desktop.fullscreen = false;
+#if defined(C_SDL2)
+        sdl_flags &= ~SDL_WINDOW_FULLSCREEN;
+#else
+        sdl_flags &= ~SDL_FULLSCREEN;
+#endif
+        GFX_CaptureMouse();
+        goto retry;
+    }
+
+	/* There seems to be a problem with MesaGL in Linux/X11 where
+	 * the first swap buffer we do is misplaced according to the
+	 * previous window size. 
+	 *
+	 * NTS: This seems to have been fixed, which is why this is
+	 * commented out. I guess not calling GFX_SetSize()
+	 * with a 0x0 widthxheight helps! */
+	//sdl.gfx_force_redraw_count = 2;
+
+	GFX_LogSDLState();
+
+	return sdl.surface;
+}
+#endif
+
+static SDL_Surface * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
+	Bit16u fixedWidth;
+	Bit16u fixedHeight;
+#if defined(C_SDL2)
+    if (sdl.desktop.want_type == SCREEN_OPENGL)
+        sdl_flags |= (unsigned int)SDL_WINDOW_OPENGL;
+#else
+	if (sdl.desktop.want_type == SCREEN_OPENGL) {
+		sdl_flags |= SDL_OPENGL;
+	}
+#endif
+	if (sdl.desktop.fullscreen) {
+		fixedWidth = sdl.desktop.full.fixed ? sdl.desktop.full.width : 0;
+		fixedHeight = sdl.desktop.full.fixed ? sdl.desktop.full.height : 0;
+#if defined(C_SDL2)
+        sdl_flags |= (unsigned int)(SDL_WINDOW_FULLSCREEN);
+#else
+		sdl_flags |= SDL_FULLSCREEN|SDL_HWSURFACE;
+#endif
+	} else {
+		fixedWidth = sdl.desktop.window.width;
+		fixedHeight = sdl.desktop.window.height;
+#if !defined(C_SDL2)
+		sdl_flags |= SDL_HWSURFACE;
+#endif
 	}
 	if (fixedWidth && fixedHeight) {
 		double ratio_w=(double)fixedWidth/(sdl.draw.width*sdl.draw.scalex);
@@ -949,11 +1092,29 @@ static SDL_Surface * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 			sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex*ratio_h);
 			sdl.clip.h=(Bit16u)fixedHeight;
 		}
-		if (sdl.desktop.fullscreen)
+		if (sdl.desktop.fullscreen) {
+#if defined(C_SDL2)
+			sdl.surface = NULL;
+			sdl.window = GFX_SetSDLWindowMode(fixedWidth, fixedHeight, (sdl_flags & SDL_WINDOW_OPENGL) ? SCREEN_OPENGL : SCREEN_SURFACE);
+			if (sdl.window != NULL) sdl.surface = SDL_GetWindowSurface(sdl.window);
+#else
 			sdl.surface = SDL_SetVideoMode(fixedWidth,fixedHeight,bpp,sdl_flags);
-		else
+#endif
+		}
+		else {
+#if defined(C_SDL2)
+			sdl.surface = NULL;
+			sdl.window = GFX_SetSDLWindowMode(sdl.clip.w, sdl.clip.h, (sdl_flags & SDL_WINDOW_OPENGL) ? SCREEN_OPENGL : SCREEN_SURFACE);
+			if (sdl.window != NULL) sdl.surface = SDL_GetWindowSurface(sdl.window);
+#else
 			sdl.surface = SDL_SetVideoMode(sdl.clip.w,sdl.clip.h,bpp,sdl_flags);
+#endif
+		}
+#if defined(C_SDL2)
+		if (sdl.surface && sdl.surface->flags & SDL_WINDOW_FULLSCREEN) {
+#else
 		if (sdl.surface && sdl.surface->flags & SDL_FULLSCREEN) {
+#endif
 			sdl.clip.x=(Sint16)((sdl.surface->w-sdl.clip.w)/2);
 			sdl.clip.y=(Sint16)((sdl.surface->h-sdl.clip.h)/2);
 		} else {
@@ -964,13 +1125,19 @@ static SDL_Surface * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		sdl.clip.x=0;sdl.clip.y=0;
 		sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex);
 		sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley);
+#if defined(C_SDL2)
+		sdl.surface = NULL;
+		sdl.window = GFX_SetSDLWindowMode(sdl.clip.w, sdl.clip.h, (sdl_flags & SDL_WINDOW_OPENGL) ? SCREEN_OPENGL : SCREEN_SURFACE);
+		if (sdl.window != NULL) sdl.surface = SDL_GetWindowSurface(sdl.window);
+#else
 		sdl.surface=SDL_SetVideoMode(sdl.clip.w,sdl.clip.h,bpp,sdl_flags);
+#endif
 	}
 
 	GFX_LogSDLState();
 	return sdl.surface;
 }
-#endif
+//#endif
 
 void GFX_TearDown(void) {
 	if (sdl.updating)
@@ -1292,29 +1459,42 @@ dosurface:
 #if C_OPENGL
 	case SCREEN_OPENGL:
 	{
+#if !defined(C_SDL2)
 		GFX_ResetSDL();
+#endif
 		if (sdl.opengl.pixel_buffer_object) {
 			glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_EXT, 0);
 			if (sdl.opengl.buffer) glDeleteBuffersARB(1, &sdl.opengl.buffer);
 		} else if (sdl.opengl.framebuf) {
 			free(sdl.opengl.framebuf);
 		}
+#if !defined(C_SDL2)
 		SDLScreen_Reset();
+#endif
 
 		sdl.opengl.framebuf=0;
 
 		SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
+#if !defined(C_SDL2)
 #if SDL_VERSION_ATLEAST(1, 2, 11)
 		Section_prop * sec=static_cast<Section_prop *>(control->GetSection("vsync"));
 		if(sec) {
 			SDL_GL_SetAttribute( SDL_GL_SWAP_CONTROL, (!strcmp(sec->Get_string("vsyncmode"),"host"))?1:0 );
 		}
 #endif
+#endif
+#if defined(C_SDL2)
+		GFX_SetupSurfaceScaledOpenGL(SDL_WINDOW_RESIZABLE, 0);
+#else
 		GFX_SetupSurfaceScaled(SDL_RESIZABLE, 0);
+#endif
 		if (!sdl.surface || sdl.surface->format->BitsPerPixel<15) {
 			LOG_MSG("SDL:OPENGL:Can't open drawing surface, are you running in 16bpp(or higher) mode?");
 			goto dosurface;
 		}
+
+        glFinish();
+        glFlush();
 
 		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &sdl.opengl.max_texsize);
 
@@ -2037,16 +2217,12 @@ void change_output(int output) {
 	case 3:
 		change_output(2);
 		sdl.desktop.want_type=SCREEN_OPENGL;
-#if !defined(C_SDL2)
 		sdl.opengl.bilinear = true;
-#endif
 		break;
 	case 4:
 		change_output(2);
 		sdl.desktop.want_type=SCREEN_OPENGL;
-#if !defined(C_SDL2)
 		sdl.opengl.bilinear = false; //NB
-#endif
 		break;
 #endif
 #if defined(__WIN32__) && !defined(C_SDL2) && (HAVE_D3D9_H)
@@ -2833,6 +3009,12 @@ void Mouse_AutoLock(bool enable) {
 	}
 }
 
+#if defined(C_SDL2) && defined(C_OPENGL)/*HACK*/
+void SDL_GL_SwapBuffers(void) {
+    SDL_GL_SwapWindow(sdl.window);
+}
+#endif
+
 static void RedrawScreen(Bit32u nWidth, Bit32u nHeight) {
 	int width;
 	int height;
@@ -3042,11 +3224,9 @@ void GFX_LosingFocus(void) {
 
 static bool PasteClipboardNext(); // added emendelson from dbDOS
 
-#if !defined(C_SDL2)
 bool GFX_IsFullscreen(void) {
 	return sdl.desktop.fullscreen;
 }
-#endif
 
 #if defined(__WIN32__) && !defined(C_SDL2)
 void OpenFileDialog( char * path_arg ) {
@@ -4248,7 +4428,11 @@ void SDL_SetupConfigSection() {
 #if (HAVE_D3D9_H) && defined(WIN32)
 		Pstring = sdl_sec->Add_string("output",Property::Changeable::Always,"direct3d");
 #else
+#if C_OPENGL
+		Pstring = sdl_sec->Add_string("output",Property::Changeable::Always,"opengl");
+#else
 		Pstring = sdl_sec->Add_string("output",Property::Changeable::Always,"surface");
+#endif
 #endif
 	Pstring->Set_help("What video system to use for output.");
 	Pstring->Set_values(outputs);
