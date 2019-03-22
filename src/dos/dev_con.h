@@ -549,7 +549,6 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
 					INT10_ScrollWindow(0,0,255,255,0,ansi.attr,page);
 					Real_INT10_SetCursorPos(0,0,page);
 					ClearAnsi();
-					break;
 				}
 				else {
                     LOG(LOG_IOCTL,LOG_NORMAL)("ANSI: unknown char %c after a esc",data[count]); /*prob () */

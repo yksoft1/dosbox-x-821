@@ -13,6 +13,8 @@ DYNAMIC_X86 = 1
 
 OPENGL = 1
 
+MT32 = 1
+
 CXXFLAGS = -O3  -DNDEBUG \
 			-std=gnu++98 -Wstrict-overflow=0 -Wstrict-aliasing=0 -fomit-frame-pointer  -mno-ms-bitfields  -I. \
 			-I$(DBX_PATH) \
