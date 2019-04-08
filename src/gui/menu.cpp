@@ -948,13 +948,15 @@ int Reflect_Menu(void) {
 	EnableMenuItem(m_handle, ID_PC98_ENABLEEGC, (!IS_PC98_ARCH) ? MF_DISABLED : MF_ENABLED);
 	EnableMenuItem(m_handle, ID_PC98_ENABLEGRCG, (!IS_PC98_ARCH) ? MF_DISABLED : MF_ENABLED);
 	EnableMenuItem(m_handle, ID_PC98_ENABLE16COLORS, (!IS_PC98_ARCH) ? MF_DISABLED : MF_ENABLED);
-
+	EnableMenuItem(m_handle, ID_PC98_ENABLE256COLORS, (!IS_PC98_ARCH) ? MF_DISABLED : MF_ENABLED);
+	
 	extern bool gdc_5mhz_mode;
 	extern bool pc98_allow_scanline_effect;
 	extern bool pc98_allow_4_display_partitions;
 	extern bool enable_pc98_egc;
 	extern bool enable_pc98_grcg;
 	extern bool enable_pc98_16color;
+	extern bool enable_pc98_256color;	
 	
 	Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
 	
@@ -974,6 +976,7 @@ int Reflect_Menu(void) {
 	CheckMenuItem(m_handle, ID_PC98_ENABLEEGC, (IS_PC98_ARCH && enable_pc98_egc) ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_PC98_ENABLEGRCG, (IS_PC98_ARCH && enable_pc98_grcg) ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_PC98_ENABLE16COLORS, (IS_PC98_ARCH && enable_pc98_16color) ? MF_CHECKED : MF_STRING);
+	CheckMenuItem(m_handle, ID_PC98_ENABLE256COLORS, (IS_PC98_ARCH && enable_pc98_16color) ? MF_CHECKED : MF_STRING);
 	
 	CheckMenuItem(m_handle, ID_MOUSE, Mouse_Drv ? MF_CHECKED : MF_STRING);
 	CheckMenuItem(m_handle, ID_AUTOCYCLE, (CPU_CycleAutoAdjust) ? MF_CHECKED : MF_STRING);
@@ -2028,6 +2031,21 @@ void MSG_Loop(void) {
 						dosbox_section->HandleInputline("pc-98 enable 16-color=1");
 					else
 						dosbox_section->HandleInputline("pc-98 enable 16-color=0");
+				}
+				break;
+			}
+			case ID_PC98_ENABLE256COLORS: {
+				extern bool enable_pc98_256color;
+				void gdc_16color_enable_update_vars(void);
+				if(IS_PC98_ARCH) {
+					enable_pc98_256color = !enable_pc98_256color;
+					gdc_16color_enable_update_vars();
+					
+					Section_prop * dosbox_section = static_cast<Section_prop *>(control->GetSection("dosbox"));
+					if (enable_pc98_256color)
+						dosbox_section->HandleInputline("pc-98 enable 256-color=1");
+					else
+						dosbox_section->HandleInputline("pc-98 enable 256-color=0");
 				}
 				break;
 			}
