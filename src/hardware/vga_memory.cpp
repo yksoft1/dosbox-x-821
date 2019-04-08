@@ -32,6 +32,8 @@
 #include "pc98_cg.h"
 #include "pc98_gdc.h"
 
+extern bool enable_pc98_256color;
+
 #ifndef C_VGARAM_CHECKED
 #define C_VGARAM_CHECKED 1
 #endif
@@ -1581,10 +1583,32 @@ public:
 			}
 		}
 		
-        if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
-            addr = (addr & 0x7FFF) + 0x20000;
-        else
-            addr &= 0x1FFFF;
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA)) {
+			if (addr >= 0xE0000) {
+				// TODO: In 256-color mode E0000h becomes memory-mapped I/O to control things like bank switching */
+				return 0x00;
+			}
+			else if (addr >= 0xB8000) {
+				// B8000h is disconnected
+				return ~((AWT)0);
+			}
+			else if (addr >= 0xA8000) {
+				// A8000h is bank 0
+				// B0000h is bank 1
+				addr &= 0x7FFF; // within 32KB bank
+				addr += 0x8000; // start of graphics RAM
+				// TODO
+			}
+			else {
+				addr &= 0x1FFFF;
+			}
+		}
+		else {
+			if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
+				addr = (addr & 0x7FFF) + 0x20000;
+			else
+				addr &= 0x1FFFF;
+		}
 			
         switch (addr>>13) {
             case 0:     /* A0000-A1FFF Character RAM */
@@ -1669,10 +1693,32 @@ public:
 		if ((addr & (~0x1F)) == 0xA3FE0)
 			return;
 
-        if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
-            addr = (addr & 0x7FFF) + 0x20000;
-        else
-            addr &= 0x1FFFF;
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA)) {
+			if (addr >= 0xE0000) {
+				// TODO: In 256-color mode E0000h becomes memory-mapped I/O to control things like bank switching */
+				return;
+			}
+			else if (addr >= 0xB8000) {
+				// B8000h is disconnected
+				return;
+			}
+			else if (addr >= 0xA8000) {
+				// A8000h is bank 0
+				// B0000h is bank 1
+				addr &= 0x7FFF; // within 32KB bank
+				addr += 0x8000; // start of graphics RAM
+				// TODO
+			}
+			else {
+				addr &= 0x1FFFF;
+			}
+		}
+		else {
+			if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
+				addr = (addr & 0x7FFF) + 0x20000;
+			else
+				addr &= 0x1FFFF;
+		}
 
 		/* 0xA4000-0xA4FFF is word-sized access to the character generator.
 		 *
@@ -1874,6 +1920,17 @@ public:
 	}
 };
 
+class VGA_PC98_LFB_Handler : public PageHandler {
+public:
+	VGA_PC98_LFB_Handler() : PageHandler(PFLAG_READABLE|PFLAG_WRITEABLE|PFLAG_NOCODE) {}
+	HostPt GetHostReadPt(Bitu phys_page) {
+		return &vga.mem.linear[(phys_page&0x7F)*4096 + 0x8000u/*Graphics RAM*/]; /* 512KB mapping */
+	}
+	HostPt GetHostWritePt(Bitu phys_page) {
+		return &vga.mem.linear[(phys_page&0x7F)*4096 + 0x8000u/*Graphics RAM*/]; /* 512KB mapping */
+	}
+};
+	
 class VGA_Map_Handler : public PageHandler {
 public:
 	VGA_Map_Handler() : PageHandler(PFLAG_READABLE|PFLAG_WRITEABLE|PFLAG_NOCODE) {}
@@ -2252,6 +2309,7 @@ public:
 };
 
 static struct vg {
+	VGA_PC98_LFB_Handler		map_lfb_pc98;
 	VGA_Map_Handler				map;
 	VGA_Slow_CGA_Handler		slow;
 	VGA_TEXT_PageHandler		text;
@@ -2416,11 +2474,15 @@ void VGA_SetupHandlers(void) {
     case M_PC98:
 		newHandler = &vgaph.pc98;
 
-        /* We need something to catch access to E0000-E7FFF IF 16/256-color mode */
-        if (pc98_gdc_vramop & (1 << VOPBIT_ANALOG))
-            MEM_SetPageHandler(0xE0, 8, newHandler );
-        else
-            MEM_ResetPageHandler_Unmapped(0xE0, 8);
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA))
+			/* 256-color mode changes A8000h-B7FFFh from planar to packed, B8000h-BFFFFh is disconnected.
+			 * A8000h is bank 0 and B0000h is bank 1, controlled by bank switching registers.
+			 * E0000h becomes "memory mapped I/O" to control bank switching */
+			MEM_SetPageHandler(0xE0, 8, newHandler );
+		else if (pc98_gdc_vramop & (1 << VOPBIT_ANALOG)) /* 16-color mode makes E000:0000 appear */
+			MEM_SetPageHandler(0xE0, 8, newHandler );
+		else
+			MEM_ResetPageHandler_Unmapped(0xE0, 8);
 
         break;
 	case M_AMSTRAD:
@@ -2570,6 +2632,21 @@ void VGA_SetupMemory() {
 		/* PCJr does not have dedicated graphics memory but uses
 		   conventional memory below 128k */
 		//TODO map?	
-	} 
+	}
+
+	if (IS_PC98_ARCH) {
+		if (enable_pc98_256color && MEM_TotalPages() <= 0xF00) {
+			/* on PC-98 systems with 256-color support, there exists a linear framebuffer
+			 * of the 256-color mode at 0xF00000 (near the top of the 16MB limit of old
+			 * 386SX CPUs). If memsize is smaller than 15MB, we can map that so games
+			 * like DOOM and Wolf98 work.
+			 *
+			 * TODO: If memsize is larger than 15MB, allow user to specify whether to
+			 *       emulate a 1MB hole at 15MB around which extended memory is wrapped,
+			 *       so these games continue to work. */
+			LOG_MSG("PC-98: Mapping 256-color mode LFB at F00000");
+			MEM_SetPageHandler(0xF00, 512/*kb*/ / 4/*kb*/, &vgaph.map_lfb_pc98 );
+		}
+	}
 }
 
