@@ -1077,6 +1077,13 @@ void pc98_egc_shift_reinit() {
     pc98_egc_shift.reinit();
 }
 
+template <class AWT> static inline void egc_fetch_planar(egc_quad &dst,const PhysPt vramoff) {
+	dst[0].w = *((uint16_t*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(0)));
+	dst[1].w = *((uint16_t*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(1)));
+	dst[2].w = *((uint16_t*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(2)));
+	dst[3].w = *((uint16_t*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(3)));
+}
+	
 static egc_quad &ope_xx(uint8_t ope, const PhysPt ad) {
   //  LOG_MSG("EGC ROP 0x%2x not impl",ope);
     return pc98_egc_last_vram;
@@ -1122,10 +1129,7 @@ static egc_quad &ope_ff(uint8_t ope, const PhysPt vramoff) {
 static egc_quad &ope_np(uint8_t ope, const PhysPt vramoff) {
 	egc_quad dst;
 
-	dst[0].w = *((uint16_t*)(vga.mem.linear+vramoff+0x08000));
-	dst[1].w = *((uint16_t*)(vga.mem.linear+vramoff+0x10000));
-	dst[2].w = *((uint16_t*)(vga.mem.linear+vramoff+0x18000));
-	dst[3].w = *((uint16_t*)(vga.mem.linear+vramoff+0x20000));
+	egc_fetch_planar<uint16_t>(/*&*/dst,vramoff);
 
 	pc98_egc_data[0].w = 0;
 	pc98_egc_data[1].w = 0;
@@ -1236,10 +1240,7 @@ static egc_quad &ope_c0(uint8_t ope, const PhysPt vramoff) {
 
     /* assume: ad is word aligned */
 
-	dst[0].w = *((uint16_t*)(vga.mem.linear+vramoff+0x08000));
-	dst[1].w = *((uint16_t*)(vga.mem.linear+vramoff+0x10000));
-	dst[2].w = *((uint16_t*)(vga.mem.linear+vramoff+0x18000));
-	dst[3].w = *((uint16_t*)(vga.mem.linear+vramoff+0x20000));
+	egc_fetch_planar<uint16_t>(/*&*/dst,vramoff);
 
 	pc98_egc_data[0].w = pc98_egc_src[0].w & dst[0].w;
 	pc98_egc_data[1].w = pc98_egc_src[1].w & dst[1].w;
@@ -1262,10 +1263,7 @@ static egc_quad &ope_fc(uint8_t ope, const PhysPt vramoff) {
 
     /* assume: ad is word aligned */
 
-	dst[0].w = *((uint16_t*)(vga.mem.linear+vramoff+0x08000));
-	dst[1].w = *((uint16_t*)(vga.mem.linear+vramoff+0x10000));
-	dst[2].w = *((uint16_t*)(vga.mem.linear+vramoff+0x18000));
-	dst[3].w = *((uint16_t*)(vga.mem.linear+vramoff+0x20000));
+	egc_fetch_planar<uint16_t>(/*&*/dst,vramoff);
 
 	pc98_egc_data[0].w  =    pc98_egc_src[0].w;
 	pc98_egc_data[0].w |= ((~pc98_egc_src[0].w) & dst[0].w);
@@ -1315,10 +1313,7 @@ static egc_quad &ope_gg(uint8_t ope, const PhysPt vramoff) {
 			break;
 	}
 
-	dst[0].w = *((uint16_t*)(vga.mem.linear+vramoff+0x08000));
-	dst[1].w = *((uint16_t*)(vga.mem.linear+vramoff+0x10000));
-	dst[2].w = *((uint16_t*)(vga.mem.linear+vramoff+0x18000));
-	dst[3].w = *((uint16_t*)(vga.mem.linear+vramoff+0x20000));
+	egc_fetch_planar<uint16_t>(/*&*/dst,vramoff);
 
 	pc98_egc_data[0].w = 0;
 	pc98_egc_data[1].w = 0;
@@ -1505,89 +1500,6 @@ void pc98_mem_msw_write(unsigned char which,unsigned char val) {
 	// TODO: Add code to write NVRAM.
 	//       According to documentation writing is only enabled if a register is written elsewhere to allow it.
 }
-
-/* functions to help cleanup memory map access instead of hardcoding offsets.
- * your C++ compiler should be smart enough to inline these into the body of this function. */
-
-/* TODO: Changes to memory layout relative to vga.mem.linear:
- *
- *       Text to take 0x00000-0x03FFF instead of 0x00000-0x07FFF.
- *
- *       Graphics to start at 0x04000
- *
- *       Each bitplane will be 64KB (0x10000) bytes long, and the page flip bit in 0xA6
- *       will select which 32KB half within the 64KB block to use, or if another bit is
- *       set as documented in Undocumented PC-98, the full 64KB block.
- *
- *       The 512KB + 32KB will be reduced slightly to 512KB + 16KB to match the layout.
- *
- *       The bitplane layout change will permit emulating an 8 bitplane 256-color mode
- *       suggested by Yksoft1 that early PC-9821 systems supported and that the 256-color
- *       driver shipped with Windows 3.1 (for PC-98) uses. Based on Windows 3.1 behavior
- *       that also means the linear framebuffer at 0xF00000 must also change in planar
- *       mode to spread all 8 bits across the planes on write and gather all 8 bits
- *       on read. As far as I can tell the Windows 3.1 256-color driver uses planar
- *       and EGC functions as it would in 16-color mode, but draws bitmaps using the
- *       LFB. The picture is wrong EXCEPT when Windows icons and bitmaps are drawn.
- *
- *       256-color packed mode will be retained as direct LFB mapping from the start of
- *       graphics RAM.
- *
- *       On a real PC-9821 laptop, contents accessible to the CPU noticeably shift order
- *       and position when you switch on/off 256-color packed mode, suggesting that the
- *       planar mode is simply reordered memory access in hardware OR that 256-color
- *       mode is "chained" (much like 256-color packed mode on IBM VGA hardware) across
- *       bitplanes. */
-
-#define PC98_VRAM_TEXT_OFFSET           ( 0x00000u )
-#define PC98_VRAM_GRAPHICS_OFFSET       ( 0x08000u )        /* where graphics memory begins */
-#define PC98_VRAM_BITPLANE_PAGE_SIZE    ( 0x08000u )        /* size of one (32KB) page in a bitplane (see A4h/A6h) */
-#define PC98_VRAM_256BANK_SIZE          ( 0x08000u )        /* window/bank size (256-color packed) */
-#define PC98_VRAM_BITPLANE_SIZE         ( 0x10000u )        /* one bitplane */
-
-static inline unsigned char *pc98_vram_text(void) {
-	return vga.mem.linear + PC98_VRAM_TEXT_OFFSET;
-}
-
-static inline unsigned char *pc98_vram_graphics(void) {
-	return vga.mem.linear + PC98_VRAM_GRAPHICS_OFFSET;
-}
-
-static inline unsigned int pc98_vram_bitplane_offset(const unsigned int b) {
-	/* WARNING: b is not range checked for performance! Do not call with b >= 8 if memsize = 512KB or b >= 4 if memsize >= 256KB */
-	return (b * PC98_VRAM_BITPLANE_SIZE);
-}
-	
-static inline unsigned char *pc98_vram_bitplane(const unsigned int b) {
-	/* WARNING: b is not range checked for performance! Do not call with b >= 8 if memsize = 512KB or b >= 4 if memsize >= 256KB */
-	return pc98_vram_graphics() + pc98_vram_bitplane_offset(b);
-}
-
-static inline unsigned int pc98_vram_256bank_offset(const unsigned int b) {
-	return (b * PC98_VRAM_256BANK_SIZE);
-}
-
-static inline unsigned char *pc98_vram_256bank(const unsigned int b) {
-	/* WARNING: b is not range checked for performance! Do not call with b >= 8 if memsize = 512KB or b >= 4 if memsize >= 256KB */
-	return pc98_vram_graphics() + pc98_vram_256bank_offset(b);
-}
-
-static inline unsigned char *pc98_vram_256bank_from_window(const unsigned int b) {
-	/* WARNING: b is not range checked for performance! Do not call with b >= 2 */
-	return pc98_vram_graphics() + pc98_vga_banks[b];
-}
-
-/* shorthand! */
-#define PC98_B_PLANE        0
-#define PC98_R_PLANE        1
-#define PC98_G_PLANE        2
-#define PC98_E_PLANE        3
-
-#define VRAM98_TEXT         ( pc98_vram_text() )
-#define VRAM98_B_PLANE      ( pc98_vram_bitplane(PC98_B_PLANE) )
-#define VRAM98_R_PLANE      ( pc98_vram_bitplane(PC98_R_PLANE) )
-#define VRAM98_G_PLANE      ( pc98_vram_bitplane(PC98_G_PLANE) )
-#define VRAM98_E_PLANE      ( pc98_vram_bitplane(PC98_E_PLANE) )
 	
 /* The NEC display is documented to have:
  *
@@ -1696,10 +1608,9 @@ public:
 	}
 };
 
-class VGA_PC98_PageHandler : public PageHandler {
-public:
-	VGA_PC98_PageHandler() : PageHandler(PFLAG_NOCODE) {}
+namespace pc98pgmio {
     template <class AWT> static inline void check_align(const PhysPt addr) {
+#if 0
         /* DEBUG: address must be aligned to datatype.
          *        Code that calls us must enforce that or subdivide
          *        to a small datatype that can follow this rule. */
@@ -1709,12 +1620,17 @@ public:
          * TODO: Do you suppose later generation PC-9821's supported DWORD size bitplane transfers?
          *       Or did NEC just give up on anything past 16-bit and focus on the SVGA side of things? */
         assert((addr&chk) == 0);
+#endif
     }
-
+}
+	
+class VGA_PC98_PageHandler : public PageHandler {
+public:
+	VGA_PC98_PageHandler() : PageHandler(PFLAG_NOCODE) {}
     template <class AWT> static inline AWT mode8_r(const unsigned int plane,const PhysPt vramoff) {
         AWT r,b;
 
-        b = *((AWT*)(vga.mem.linear + vramoff));
+        b = *((AWT*)(pc98_pgraph_current_cpu_page + vramoff));
         r = b ^ *((AWT*)pc98_gdc_tiles[plane].b);
 
         return r;
@@ -1729,7 +1645,7 @@ public:
         else
             tb = pc98_gdc_tiles[plane].b[0];
 
-        *((AWT*)(vga.mem.linear + vramoff)) = tb;
+        *((AWT*)(pc98_pgraph_current_cpu_page + vramoff)) = tb;
     }
 
     template <class AWT> static inline void modeC_w(const unsigned int plane,const PhysPt vramoff,const AWT mask,const AWT val) {
@@ -1741,17 +1657,17 @@ public:
         else
             tb = pc98_gdc_tiles[plane].b[0];
 
-        t  = *((AWT*)(vga.mem.linear + vramoff)) & mask;
+        t  = *((AWT*)(pc98_pgraph_current_cpu_page + vramoff)) & mask;
         t |= val & tb;
-        *((AWT*)(vga.mem.linear + vramoff)) = t;
+        *((AWT*)(pc98_pgraph_current_cpu_page + vramoff)) = t;
     }
 
     template <class AWT> static inline AWT modeEGC_r(const PhysPt vramoff,const PhysPt fulloff) {
         /* assume: vramoff is even IF AWT is 16-bit wide */
-        *((AWT*)(pc98_egc_last_vram[0].b+(vramoff&1))) = *((AWT*)(vga.mem.linear+vramoff+0x08000));
-        *((AWT*)(pc98_egc_last_vram[1].b+(vramoff&1))) = *((AWT*)(vga.mem.linear+vramoff+0x10000));
-        *((AWT*)(pc98_egc_last_vram[2].b+(vramoff&1))) = *((AWT*)(vga.mem.linear+vramoff+0x18000));
-        *((AWT*)(pc98_egc_last_vram[3].b+(vramoff&1))) = *((AWT*)(vga.mem.linear+vramoff+0x20000));
+		*((AWT*)(pc98_egc_last_vram[0].b+(vramoff&1))) = *((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(0)));
+		*((AWT*)(pc98_egc_last_vram[1].b+(vramoff&1))) = *((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(1)));
+		*((AWT*)(pc98_egc_last_vram[2].b+(vramoff&1))) = *((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(2)));
+		*((AWT*)(pc98_egc_last_vram[3].b+(vramoff&1))) = *((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(3)));
 
         /* bits [10:10] = read source
          *    1 = shifter input is CPU write data
@@ -1802,13 +1718,13 @@ public:
             if (!pc98_egc_shiftinput)
                 return *((AWT*)(pc98_egc_src[pc98_egc_lead_plane&3].b));
             else
-                return *((AWT*)(vga.mem.linear+vramoff+0x08000+((pc98_egc_lead_plane&3)*0x8000)));
+                return *((AWT*)(pc98_pgraph_current_cpu_page+vramoff+((pc98_egc_lead_plane&3)*PC98_VRAM_BITPLANE_SIZE)));
         }
 
-        return *((AWT*)(vga.mem.linear+fulloff));
+        return *((AWT*)(pc98_pgraph_current_cpu_page+fulloff));
     }
 
-    template <class AWT> static inline void modeEGC_w(const PhysPt vramoff,const PhysPt fulloff,const AWT val) {
+    template <class AWT> static inline void modeEGC_w(const PhysPt vramoff, const AWT val) {
         /* assume: vramoff is even IF AWT is 16-bit wide */
 
         /* 0x4A4:
@@ -1823,10 +1739,10 @@ public:
          */
         /* Neko Project II: if ((egc.ope & 0x0300) == 0x0200) ... */
         if (pc98_egc_regload & 2) { /* load VRAM data before writing on VRAM write (or INVALID) */
-            *((AWT*)(pc98_gdc_tiles[0].b+(vramoff&1))) = *((AWT*)(vga.mem.linear+vramoff+0x08000));
-            *((AWT*)(pc98_gdc_tiles[1].b+(vramoff&1))) = *((AWT*)(vga.mem.linear+vramoff+0x10000));
-            *((AWT*)(pc98_gdc_tiles[2].b+(vramoff&1))) = *((AWT*)(vga.mem.linear+vramoff+0x18000));
-            *((AWT*)(pc98_gdc_tiles[3].b+(vramoff&1))) = *((AWT*)(vga.mem.linear+vramoff+0x20000));
+			*((AWT*)(pc98_gdc_tiles[0].b+(vramoff&1))) = *((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(0)));
+			*((AWT*)(pc98_gdc_tiles[1].b+(vramoff&1))) = *((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(1)));
+			*((AWT*)(pc98_gdc_tiles[2].b+(vramoff&1))) = *((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(2)));
+			*((AWT*)(pc98_gdc_tiles[3].b+(vramoff&1))) = *((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(3)));
         }
 
         egc_quad &ropdata = egc_ope<AWT>(vramoff, val);
@@ -1835,38 +1751,29 @@ public:
 
         if (accmask != 0) {
             if (!(pc98_egc_access & 1)) {
-                *((AWT*)(vga.mem.linear+vramoff+0x08000)) &= ~accmask;
-                *((AWT*)(vga.mem.linear+vramoff+0x08000)) |=  accmask & *((AWT*)(ropdata[0].b+(vramoff&1)));
+				*((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(0))) &= ~accmask;
+				*((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(0))) |=  accmask & *((AWT*)(ropdata[0].b+(vramoff&1)));
             }
             if (!(pc98_egc_access & 2)) {
-                *((AWT*)(vga.mem.linear+vramoff+0x10000)) &= ~accmask;
-                *((AWT*)(vga.mem.linear+vramoff+0x10000)) |=  accmask & *((AWT*)(ropdata[1].b+(vramoff&1)));
+				*((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(1))) &= ~accmask;
+				*((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(1))) |=  accmask & *((AWT*)(ropdata[1].b+(vramoff&1)));
             }
             if (!(pc98_egc_access & 4)) {
-                *((AWT*)(vga.mem.linear+vramoff+0x18000)) &= ~accmask;
-                *((AWT*)(vga.mem.linear+vramoff+0x18000)) |=  accmask & *((AWT*)(ropdata[2].b+(vramoff&1)));
+				*((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(2))) &= ~accmask;
+				*((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(2))) |=  accmask & *((AWT*)(ropdata[2].b+(vramoff&1)));
             }
             if (!(pc98_egc_access & 8)) {
-                *((AWT*)(vga.mem.linear+vramoff+0x20000)) &= ~accmask;
-                *((AWT*)(vga.mem.linear+vramoff+0x20000)) |=  accmask & *((AWT*)(ropdata[3].b+(vramoff&1)));
+				*((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(3))) &= ~accmask;
+				*((AWT*)(pc98_pgraph_current_cpu_page+vramoff+pc98_pgram_bitplane_offset(3))) |=  accmask & *((AWT*)(ropdata[3].b+(vramoff&1)));
             }
         }
     }
 
     template <class AWT> AWT readc(PhysPt addr) {
-        unsigned int vop_offset = 0;
-
-        check_align<AWT>(addr);
+        pc98pgmio::check_align<AWT>(addr);
 		
-		if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
-			addr = (addr & 0x7FFF) + 0x20000;
-		else
-			addr &= 0x1FFFF;
-			
-		if (pc98_gdc_vramop & (1 << VOPBIT_VGA))
-			vop_offset = (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 0x40000 : 0;
-		else
-			vop_offset = (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 0x20000 : 0;
+		unsigned int plane = ((addr >> 15u) + 3u) & 3u;
+		addr &= 0x7FFF;
 		
         /* reminder:
          *
@@ -1886,26 +1793,25 @@ public:
             case 0x07:
 			case 0x0C:
 			case 0x0D:
-                return *((AWT*)(vga.mem.linear+addr+vop_offset));
+                return *((AWT*)(pc98_pgraph_current_cpu_page+addr+pc98_pgram_bitplane_offset(plane)));
             case 0x08: /* TCR/TDW */
             case 0x09:
                 {
                     AWT r = 0;
 
                     /* this reads multiple bitplanes at once */
-                    addr &= 0x7FFF;
 
                     if (!(pc98_gdc_modereg & 1)) // blue channel
-                        r |= mode8_r<AWT>(/*plane*/0,addr + 0x8000 + vop_offset);
+                        r |= mode8_r<AWT>(/*plane*/0,addr + pc98_pgram_bitplane_offset(0));
 
                     if (!(pc98_gdc_modereg & 2)) // red channel
-                        r |= mode8_r<AWT>(/*plane*/1,addr + 0x10000 + vop_offset);
+                        r |= mode8_r<AWT>(/*plane*/1,addr + pc98_pgram_bitplane_offset(1));
 
                     if (!(pc98_gdc_modereg & 4)) // green channel
-                        r |= mode8_r<AWT>(/*plane*/2,addr + 0x18000 + vop_offset);
+                        r |= mode8_r<AWT>(/*plane*/2,addr + pc98_pgram_bitplane_offset(2));
 
                     if (!(pc98_gdc_modereg & 8)) // extended channel
-                        r |= mode8_r<AWT>(/*plane*/3,addr + 0x20000 + vop_offset);
+                        r |= mode8_r<AWT>(/*plane*/3,addr + pc98_pgram_bitplane_offset(3));
 
                     /* NTS: Apparently returning this value correctly really matters to the
                      *      sprite engine in "Edge", else visual errors occur. */
@@ -1916,7 +1822,7 @@ public:
             case 0x0E:
             case 0x0F:
                 /* this reads multiple bitplanes at once */
-                return modeEGC_r<AWT>((addr&0x7FFF) + vop_offset,addr + vop_offset);
+                return modeEGC_r<AWT>(addr,addr);
             default: /* should not happen */
                 break;
         };
@@ -1925,19 +1831,10 @@ public:
 	}
 
 	template <class AWT> void writec(PhysPt addr,AWT val){
-        unsigned int vop_offset = 0;
+        pc98pgmio::check_align<AWT>(addr);
 
-        check_align<AWT>(addr);
-
-		if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
-			addr = (addr & 0x7FFF) + 0x20000;
-		else
-			addr &= 0x1FFFF;
-		
-		if (pc98_gdc_vramop & (1 << VOPBIT_VGA))
-			vop_offset = (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 0x40000 : 0;
-		else
-			vop_offset = (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 0x20000 : 0;
+		unsigned int plane = ((addr >> 15u) + 3u) & 3u;
+		addr &= 0x7FFF;
 
         /* reminder:
          *
@@ -1955,26 +1852,25 @@ public:
             case 0x05:
             case 0x06:
             case 0x07:
-                *((AWT*)(vga.mem.linear+addr+vop_offset)) = val;
+                *((AWT*)(pc98_pgraph_current_cpu_page+addr+pc98_pgram_bitplane_offset(plane))) = val;
                 break;
             case 0x08:  /* TCR/TDW write tile data, no masking */
             case 0x09:
                 {
                     /* this writes to multiple bitplanes at once.
                      * notice that the value written has no meaning, only the tile data and memory address. */
-                    addr &= 0x7FFF;
 
                     if (!(pc98_gdc_modereg & 1)) // blue channel
-                        mode8_w<AWT>(0/*plane*/,addr + 0x8000 + vop_offset);
+                        mode8_w<AWT>(0/*plane*/,addr + pc98_pgram_bitplane_offset(0));
 
                     if (!(pc98_gdc_modereg & 2)) // red channel
-                        mode8_w<AWT>(1/*plane*/,addr + 0x10000 + vop_offset);
+                        mode8_w<AWT>(1/*plane*/,addr + pc98_pgram_bitplane_offset(1));
 
                     if (!(pc98_gdc_modereg & 4)) // green channel
-                        mode8_w<AWT>(2/*plane*/,addr + 0x18000 + vop_offset);
+                        mode8_w<AWT>(2/*plane*/,addr + pc98_pgram_bitplane_offset(2));
 
                     if (!(pc98_gdc_modereg & 8)) // extended channel
-                        mode8_w<AWT>(3/*plane*/,addr + 0x20000 + vop_offset);
+                        mode8_w<AWT>(3/*plane*/,addr + pc98_pgram_bitplane_offset(3));
                 }
                 break;
             case 0x0C:  /* read/modify/write from tile with masking */
@@ -1983,19 +1879,18 @@ public:
                     const AWT mask = ~val;
 
                     /* this writes to multiple bitplanes at once */
-                    addr &= 0x7FFF;
 
                     if (!(pc98_gdc_modereg & 1)) // blue channel
-                        modeC_w<AWT>(0/*plane*/,addr + 0x8000 + vop_offset,mask,val);
+                        modeC_w<AWT>(0/*plane*/,addr + pc98_pgram_bitplane_offset(0),mask,val);
 
                     if (!(pc98_gdc_modereg & 2)) // red channel
-                        modeC_w<AWT>(1/*plane*/,addr + 0x10000 + vop_offset,mask,val);
+                        modeC_w<AWT>(1/*plane*/,addr + pc98_pgram_bitplane_offset(1),mask,val);
 
                     if (!(pc98_gdc_modereg & 4)) // green channel
-                        modeC_w<AWT>(2/*plane*/,addr + 0x18000 + vop_offset,mask,val);
+                        modeC_w<AWT>(2/*plane*/,addr + pc98_pgram_bitplane_offset(2),mask,val);
 
                     if (!(pc98_gdc_modereg & 8)) // extended channel
-                        modeC_w<AWT>(3/*plane*/,addr + 0x20000 + vop_offset,mask,val);
+                        modeC_w<AWT>(3/*plane*/,addr + pc98_pgram_bitplane_offset(3),mask,val);
                 }
                 break;
             case 0x0A: /* EGC write */
@@ -2003,7 +1898,7 @@ public:
             case 0x0E:
             case 0x0F:
                 /* this reads multiple bitplanes at once */
-                modeEGC_w<AWT>((addr&0x7FFF) + vop_offset,addr + vop_offset,val);
+                modeEGC_w<AWT>(addr,val);
                 break;
             default: /* Should not happen */
                 break;
@@ -2096,10 +1991,10 @@ class VGA_PC98_LFB_Handler : public PageHandler {
 public:
 	VGA_PC98_LFB_Handler() : PageHandler(PFLAG_READABLE|PFLAG_WRITEABLE|PFLAG_NOCODE) {}
 	HostPt GetHostReadPt(Bitu phys_page) {
-		return &vga.mem.linear[(phys_page&0x7F)*4096 + 0x8000u/*Graphics RAM*/]; /* 512KB mapping */
+		return &vga.mem.linear[(phys_page&0x7F)*4096 + PC98_VRAM_GRAPHICS_OFFSET]; /* 512KB mapping */
 	}
 	HostPt GetHostWritePt(Bitu phys_page) {
-		return &vga.mem.linear[(phys_page&0x7F)*4096 + 0x8000u/*Graphics RAM*/]; /* 512KB mapping */
+		return &vga.mem.linear[(phys_page&0x7F)*4096 + PC98_VRAM_GRAPHICS_OFFSET]; /* 512KB mapping */
 	}
 };
 	
@@ -2802,6 +2697,10 @@ void VGA_SetupMemory() {
 	    vga.draw.linear_base = vga.mem.linear;
         vga.tandy.draw_base = vga.mem.linear;
         vga.tandy.mem_base = vga.mem.linear;
+
+		/* PC-98 pointers */
+		pc98_pgraph_current_cpu_page = vga.mem.linear + PC98_VRAM_GRAPHICS_OFFSET;
+		pc98_pgraph_current_display_page = vga.mem.linear + PC98_VRAM_GRAPHICS_OFFSET;
 
         /* may be related */
         VGA_SetupHandlers();
