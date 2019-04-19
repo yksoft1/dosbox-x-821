@@ -5444,6 +5444,7 @@ private:
 			// enable the 4th bitplane, for 16-color analog graphics mode.
 			// TODO: When we allow the user to emulate only the 8-color BGR digital mode,
 			// logo drawing should use an alternate drawing method.
+			IO_Write(0x6A,0x20);    // disable 256-color
 			IO_Write(0x6A,0x01); // enable 16-color analog mode (this makes the 4th bitplane appear)
 			IO_Write(0x6A,0x04); // but we don't need the EGC graphics
 
