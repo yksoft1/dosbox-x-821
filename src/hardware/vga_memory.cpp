@@ -33,7 +33,7 @@
 #include "pc98_gdc.h"
 
 unsigned char pc98_vga_mmio[0x200] = {0}; /* PC-98 memory-mapped VGA registers at E0000h */
-uint32_t pc98_vga_banks[2] = {0x8000,0x8000}; /* bank switching offsets */
+uint32_t pc98_vga_banks[2] = {0x0000,0x0000}; /* bank switching offsets */
 	
 extern bool enable_pc98_256color;
 
@@ -159,10 +159,10 @@ void pc98_vga_mmio_write(unsigned int reg,Bit8u val) {
 
 	switch (reg) {
 		case 0x004: // bank 0
-			pc98_vga_banks[0] = ((val & 0xFu) + 1u) << 15u;
+			pc98_vga_banks[0] = (val & 0xFu) << 15u;
 			break;
 		case 0x006: // bank 1
-			pc98_vga_banks[1] = ((val & 0xFu) + 1u) << 15u;
+			pc98_vga_banks[1] = (val & 0xFu) << 15u;
 			break;
 		default:
 			break;
@@ -1500,6 +1500,95 @@ unsigned char pc98_mem_msw(unsigned char which) {
 	return pc98_mem_msw_m[which&7];
 }
 
+void pc98_mem_msw_write(unsigned char which,unsigned char val) {
+	LOG_MSG("WARNING: PC-98 NVRAM write to 0x%x value 0x%x, not implemented yet",which,val);
+	// TODO: Add code to write NVRAM.
+	//       According to documentation writing is only enabled if a register is written elsewhere to allow it.
+}
+
+/* functions to help cleanup memory map access instead of hardcoding offsets.
+ * your C++ compiler should be smart enough to inline these into the body of this function. */
+
+/* TODO: Changes to memory layout relative to vga.mem.linear:
+ *
+ *       Text to take 0x00000-0x03FFF instead of 0x00000-0x07FFF.
+ *
+ *       Graphics to start at 0x04000
+ *
+ *       Each bitplane will be 64KB (0x10000) bytes long, and the page flip bit in 0xA6
+ *       will select which 32KB half within the 64KB block to use, or if another bit is
+ *       set as documented in Undocumented PC-98, the full 64KB block.
+ *
+ *       The 512KB + 32KB will be reduced slightly to 512KB + 16KB to match the layout.
+ *
+ *       The bitplane layout change will permit emulating an 8 bitplane 256-color mode
+ *       suggested by Yksoft1 that early PC-9821 systems supported and that the 256-color
+ *       driver shipped with Windows 3.1 (for PC-98) uses. Based on Windows 3.1 behavior
+ *       that also means the linear framebuffer at 0xF00000 must also change in planar
+ *       mode to spread all 8 bits across the planes on write and gather all 8 bits
+ *       on read. As far as I can tell the Windows 3.1 256-color driver uses planar
+ *       and EGC functions as it would in 16-color mode, but draws bitmaps using the
+ *       LFB. The picture is wrong EXCEPT when Windows icons and bitmaps are drawn.
+ *
+ *       256-color packed mode will be retained as direct LFB mapping from the start of
+ *       graphics RAM.
+ *
+ *       On a real PC-9821 laptop, contents accessible to the CPU noticeably shift order
+ *       and position when you switch on/off 256-color packed mode, suggesting that the
+ *       planar mode is simply reordered memory access in hardware OR that 256-color
+ *       mode is "chained" (much like 256-color packed mode on IBM VGA hardware) across
+ *       bitplanes. */
+
+#define PC98_VRAM_TEXT_OFFSET           ( 0x00000u )
+#define PC98_VRAM_GRAPHICS_OFFSET       ( 0x08000u )        /* where graphics memory begins */
+#define PC98_VRAM_BITPLANE_PAGE_SIZE    ( 0x08000u )        /* size of one (32KB) page in a bitplane (see A4h/A6h) */
+#define PC98_VRAM_256BANK_SIZE          ( 0x08000u )        /* window/bank size (256-color packed) */
+#define PC98_VRAM_BITPLANE_SIZE         ( 0x10000u )        /* one bitplane */
+
+static inline unsigned char *pc98_vram_text(void) {
+	return vga.mem.linear + PC98_VRAM_TEXT_OFFSET;
+}
+
+static inline unsigned char *pc98_vram_graphics(void) {
+	return vga.mem.linear + PC98_VRAM_GRAPHICS_OFFSET;
+}
+
+static inline unsigned int pc98_vram_bitplane_offset(const unsigned int b) {
+	/* WARNING: b is not range checked for performance! Do not call with b >= 8 if memsize = 512KB or b >= 4 if memsize >= 256KB */
+	return (b * PC98_VRAM_BITPLANE_SIZE);
+}
+	
+static inline unsigned char *pc98_vram_bitplane(const unsigned int b) {
+	/* WARNING: b is not range checked for performance! Do not call with b >= 8 if memsize = 512KB or b >= 4 if memsize >= 256KB */
+	return pc98_vram_graphics() + pc98_vram_bitplane_offset(b);
+}
+
+static inline unsigned int pc98_vram_256bank_offset(const unsigned int b) {
+	return (b * PC98_VRAM_256BANK_SIZE);
+}
+
+static inline unsigned char *pc98_vram_256bank(const unsigned int b) {
+	/* WARNING: b is not range checked for performance! Do not call with b >= 8 if memsize = 512KB or b >= 4 if memsize >= 256KB */
+	return pc98_vram_graphics() + pc98_vram_256bank_offset(b);
+}
+
+static inline unsigned char *pc98_vram_256bank_from_window(const unsigned int b) {
+	/* WARNING: b is not range checked for performance! Do not call with b >= 2 */
+	return pc98_vram_graphics() + pc98_vga_banks[b];
+}
+
+/* shorthand! */
+#define PC98_B_PLANE        0
+#define PC98_R_PLANE        1
+#define PC98_G_PLANE        2
+#define PC98_E_PLANE        3
+
+#define VRAM98_TEXT         ( pc98_vram_text() )
+#define VRAM98_B_PLANE      ( pc98_vram_bitplane(PC98_B_PLANE) )
+#define VRAM98_R_PLANE      ( pc98_vram_bitplane(PC98_R_PLANE) )
+#define VRAM98_G_PLANE      ( pc98_vram_bitplane(PC98_G_PLANE) )
+#define VRAM98_E_PLANE      ( pc98_vram_bitplane(PC98_E_PLANE) )
+	
 /* The NEC display is documented to have:
  *
  * A0000-A3FFF      T-RAM (text) (8KB WORDs)
@@ -1512,6 +1601,100 @@ unsigned char pc98_mem_msw(unsigned char which) {
  * T-RAM character display RAM is 16-bits per character.
  * ASCII text has upper 8 bits zero.
  * SHIFT-JIS doublewide characters use the upper byte for non-ASCII. */
+
+/* A0000-A3FFF text character + attribute RAM */
+/* 
+ * 0xA3FE2      MSW1
+ * 0xA3FE6      MSW2
+ * 0xA3FEA      MSW3
+ * 0xA3FEE      MSW4
+ * 0xA3FF2      MSW5
+ * 0xA3FF6      MSW6
+ * 0xA3FFA      MSW7
+ * 0xA3FFE      MSW8
+ *
+ * TODO: Study real hardware to determine what the bytes between the NVRAM bytes are.
+ *       Are they repeats of the MSW bytes, some other value, or just 0xFF?
+ */
+class VGA_PC98_TEXT_PageHandler : public PageHandler {
+public:
+	VGA_PC98_TEXT_PageHandler() : PageHandler(PFLAG_NOCODE) {}
+	Bitu readb(PhysPt addr) {
+		addr &= 0x3FFFu;
+
+		if (addr >= 0x3FE0u)
+			return pc98_mem_msw((addr >> 2) & 7);
+		else if ((addr & 0x2001) == 0x2001)
+			return ~((Bitu)0); /* Odd bytes of attribute RAM do not exist, apparently */
+
+		return VRAM98_TEXT[addr];
+	}
+	void writeb(PhysPt addr,Bitu val) {
+		addr &= 0x3FFFu;
+
+		if (addr >= 0x3FE0u)
+			return pc98_mem_msw_write((addr >> 2) & 7,(unsigned char)val);
+		else if ((addr & 0x2001) == 0x2001)
+			return;             /* Odd bytes of attribute RAM do not exist, apparently */
+
+		VRAM98_TEXT[addr] = (unsigned char)val;
+	}
+};
+
+extern uint16_t a1_font_load_addr;
+
+/* A4000-A4FFF character generator memory-mapped I/O */
+/* 0xA4000-0xA4FFF is word-sized access to the character generator.
+ *
+ * Some games, though not many, appear to prefer this memory-mapped I/O
+ * rather than the I/O ports.
+ *
+ * This fixes:
+ *   - Eve Burst Error
+ *
+ * Also noted: Disassembling the CG functions of the BIOS on an actual
+ *             PC9821 laptop reveals that the BIOS also uses this method,
+ *             using REP MOVSW
+ *
+ * Also noted: On real hardware, A4000-A4FFF seems to latch to the CG.
+ *             A5000-A5FFF seems to latch to nothing. */
+
+/* according to real hardware, memory address does not affect char offset (port 0xA5) */
+class VGA_PC98_CG_PageHandler : public PageHandler {
+public:
+	VGA_PC98_CG_PageHandler() : PageHandler(PFLAG_NOCODE) {}
+	Bitu readb(PhysPt addr) {
+		return pc98_font_char_read(a1_font_load_addr,(addr >> 1) & 0xF,addr & 1);
+	}
+	void writeb(PhysPt addr,Bitu val) {
+		pc98_font_char_write(a1_font_load_addr,(addr >> 1) & 0xF,addr & 1,(uint8_t)val);
+	}
+};
+
+/* 256-color control registers, memory mapped I/O */
+class VGA_PC98_256MMIO_PageHandler : public PageHandler {
+public:
+	VGA_PC98_256MMIO_PageHandler() : PageHandler(PFLAG_NOCODE) {}
+	Bitu readb(PhysPt addr) {
+		return pc98_vga_mmio_read(addr & 0x7FFFu);
+	}
+	void writeb(PhysPt addr,Bitu val) {
+		pc98_vga_mmio_write(addr & 0x7FFFu,(Bit8u)val);
+	}
+};
+
+// A8000h is bank 0
+// B0000h is bank 1
+template <const unsigned int bank> class VGA_PC98_256BANK_PageHandler : public PageHandler {
+public:
+	VGA_PC98_256BANK_PageHandler() : PageHandler(PFLAG_NOCODE) {}
+	Bitu readb(PhysPt addr) {
+		return pc98_vram_256bank_from_window(bank)[addr & 0x7FFFu];
+	}
+	void writeb(PhysPt addr,Bitu val) {
+		pc98_vram_256bank_from_window(bank)[addr & 0x7FFFu] = (unsigned char)val;
+	}
+};
 
 class VGA_PC98_PageHandler : public PageHandler {
 public:
@@ -1673,95 +1856,17 @@ public:
     template <class AWT> AWT readc(PhysPt addr) {
         unsigned int vop_offset = 0;
 
-		addr = PAGING_GetPhysicalAddress(addr);
-
         check_align<AWT>(addr);
-
-		if ((addr & (~0x1F)) == 0xA3FE0) {
-			/*
-			 * 0xA3FE2 MSW1
-			 * 0xA3FE6 MSW2
-			 * 0xA3FEA MSW3
-			 * 0xA3FEE MSW4
-			 * 0xA3FF2 MSW5
-			 * 0xA3FF6 MSW6
-			 * 0xA3FFA MSW7
-			 * 0xA3FFE MSW8
-			 */
-			// TODO: What does WORD-sized reading do? This returns a BYTE
-			return pc98_mem_msw((addr >> 2) & 7);
-		}
 		
-		/* 0xA4000-0xA4FFF is word-sized access to the character generator.
-		 *
-		 * Some games, though not many, appear to prefer this memory-mapped I/O
-		 * rather than the I/O ports.
-		 *
-		 * This fixes:
-		 * - Eve Burst Error
-		 *
-		 * Also noted: Disassembling the CG functions of the BIOS on an actual
-		 * PC9821 laptop reveals that the BIOS also uses this method,
-		 * using REP MOVSW
-		 *
-		 * Also noted: On real hardware, A4000-A4FFF seems to latch to the CG.
-		 *             A5000-A5FFF seems to latch to nothing. */
-		if ((addr & (~0xFFF)) == 0xA4000) {
-			extern uint16_t a1_font_load_addr;
+		if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
+			addr = (addr & 0x7FFF) + 0x20000;
+		else
+			addr &= 0x1FFFF;
 			
-			// TODO: Does the memory address update the char offset value written to the I/O port version?
-			if (sizeof(AWT) > 1) {
-				return
-					(pc98_font_char_read(a1_font_load_addr,(addr >> 1) & 0xF,0) ) +
-					(pc98_font_char_read(a1_font_load_addr,(addr >> 1) & 0xF,1) << 8u);
-				}
-			else {
-				return pc98_font_char_read(a1_font_load_addr,(addr >> 1) & 0xF,addr & 1);
-			}
-		}
-		
-		if (pc98_gdc_vramop & (1 << VOPBIT_VGA)) {
-			if (addr >= 0xE0000) {
-                if (sizeof(AWT) > 1)
-					return (pc98_vga_mmio_read(addr + 1 - 0xE0000u) << 8u) +
-							pc98_vga_mmio_read(addr     - 0xE0000u);
-	
-				return pc98_vga_mmio_read(addr - 0xE0000u);
-			}
-			else if (addr >= 0xB8000) {
-				// B8000h is disconnected
-				return ~((AWT)0);
-			}
-			else if (addr >= 0xA8000) {
-				// A8000h is bank 0
-				// B0000h is bank 1
-				addr = pc98_vga_banks[(addr - 0xA8000u) >> 15u] + (addr & 0x7FFFu);
-			}
-			else {
-				addr &= 0x1FFFF;
-			}
-		}
-		else {
-			if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
-				addr = (addr & 0x7FFF) + 0x20000;
-			else
-				addr &= 0x1FFFF;
-		}
-			
-        switch (addr>>13) {
-            case 0:     /* A0000-A1FFF Character RAM */
-                return *((AWT*)(vga.mem.linear+addr));
-            case 1:     /* A2000-A3FFF Attribute RAM */
-                if (addr & 1) return ~0; /* ignore odd bytes */
-                return *((AWT*)(vga.mem.linear+addr)) | 0xFF00; /* odd bytes 0xFF */
-            case 2:     /* A4000-A5FFF Unknown ?? */
-                return *((AWT*)(vga.mem.linear+addr));
-            case 3:     /* A6000-A7FFF Not present */
-                return ~0;
-            default:    /* A8000-BFFFF G-RAM */
-                vop_offset = (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 0x20000 : 0;
-                break;
-        };
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA))
+			vop_offset = (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 0x40000 : 0;
+		else
+			vop_offset = (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 0x20000 : 0;
 		
         /* reminder:
          *
@@ -1779,6 +1884,8 @@ public:
             case 0x05:
             case 0x06:
             case 0x07:
+			case 0x0C:
+			case 0x0D:
                 return *((AWT*)(vga.mem.linear+addr+vop_offset));
             case 0x08: /* TCR/TDW */
             case 0x09:
@@ -1804,9 +1911,6 @@ public:
                      *      sprite engine in "Edge", else visual errors occur. */
                     return ~r;
                 }
-            case 0x0C:
-            case 0x0D:
-                return *((AWT*)(vga.mem.linear+addr+vop_offset));
             case 0x0A: /* EGC read */
             case 0x0B:
             case 0x0E:
@@ -1814,8 +1918,7 @@ public:
                 /* this reads multiple bitplanes at once */
                 return modeEGC_r<AWT>((addr&0x7FFF) + vop_offset,addr + vop_offset);
             default: /* should not happen */
-                LOG_MSG("PC-98 VRAM read warning: Unsupported opmode 0x%X",pc98_gdc_vramop);
-                return *((AWT*)(vga.mem.linear+addr+vop_offset));
+                break;
         };
 
 		return ~0;
@@ -1824,87 +1927,17 @@ public:
 	template <class AWT> void writec(PhysPt addr,AWT val){
         unsigned int vop_offset = 0;
 
-		addr = PAGING_GetPhysicalAddress(addr);
-
         check_align<AWT>(addr);
-		
-		if ((addr & (~0x1F)) == 0xA3FE0)
-			return;
 
-		if (pc98_gdc_vramop & (1 << VOPBIT_VGA)) {
-			if (addr >= 0xE0000) {
-				if (sizeof(AWT) > 1)
-					pc98_vga_mmio_write(addr + 1 - 0xE0000u,(Bit8u)(val >> 8u));
-	
-				pc98_vga_mmio_write(addr - 0xE0000u,(Bit8u)val);
-				return;
-			}
-			else if (addr >= 0xB8000) {
-				// B8000h is disconnected
-				return;
-			}
-			else if (addr >= 0xA8000) {
-				// A8000h is bank 0
-				// B0000h is bank 1
-				addr = pc98_vga_banks[(addr - 0xA8000u) >> 15u] + (addr & 0x7FFFu);
-			}
-			else {
-				addr &= 0x1FFFF;
-			}
-		}
-		else {
-			if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
-				addr = (addr & 0x7FFF) + 0x20000;
-			else
-				addr &= 0x1FFFF;
-		}
-
-		/* 0xA4000-0xA4FFF is word-sized access to the character generator.
-		 *
-	 	 * Some games, though not many, appear to prefer this memory-mapped I/O
-		 * rather than the I/O ports.
-		 *
-		 * This fixes:
-		 * - Eve Burst Error
-		 *
-		 * Also noted: Disassembling the CG functions of the BIOS on an actual
-		 * PC9821 laptop reveals that the BIOS also uses this method,
-		 * using REP MOVSW
-		 *
-		 * Also noted: On real hardware, A4000-A4FFF seems to latch to the CG.
-		 *             A5000-A5FFF seems to latch to nothing. */
-		if ((addr & (~0xFFF)) == 0xA4000) {
-			extern uint16_t a1_font_load_addr;
-			
-			// TODO: Does the memory address update the char offset value written to the I/O port version?
-			if (sizeof(AWT) > 1) {
-				// FIXME: Untested
-				pc98_font_char_write(a1_font_load_addr,(addr >> 1) & 0xF,0,val);
-				pc98_font_char_write(a1_font_load_addr,(addr >> 1) & 0xF,1,val >> 8);
-			}
-			else {
-				pc98_font_char_write(a1_font_load_addr,(addr >> 1) & 0xF,addr & 1,val);
-			}
-			return;
-		}
+		if (addr >= 0xE0000) /* the 4th bitplane (EGC 16-color mode) */
+			addr = (addr & 0x7FFF) + 0x20000;
+		else
+			addr &= 0x1FFFF;
 		
-        switch (addr>>13) {
-            case 0:     /* A0000-A1FFF Character RAM */
-                *((AWT*)(vga.mem.linear+addr)) = val;
-                return;
-            case 1:     /* A2000-A3FFF Attribute RAM */
-                if (addr & 1) return; /* ignore odd bytes */
-                *((AWT*)(vga.mem.linear+addr)) = val | 0xFF00;
-                return;
-            case 2:     /* A4000-A5FFF Unknown ?? */
-                *((AWT*)(vga.mem.linear+addr)) = val;
-                return;
-            case 3:     /* A6000-A7FFF Not present */
-                return;
-            default:    /* A8000-BFFFF G-RAM */
-                vop_offset = (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 0x20000 : 0;
-                break;
-        };
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA))
+			vop_offset = (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 0x40000 : 0;
+		else
+			vop_offset = (pc98_gdc_vramop & (1 << VOPBIT_ACCESS)) ? 0x20000 : 0;
 
         /* reminder:
          *
@@ -1972,24 +2005,23 @@ public:
                 /* this reads multiple bitplanes at once */
                 modeEGC_w<AWT>((addr&0x7FFF) + vop_offset,addr + vop_offset,val);
                 break;
-            default: /* Should no longer happen */
-                LOG_MSG("PC-98 VRAM write warning: Unsupported opmode 0x%X",pc98_gdc_vramop);
-                *((AWT*)(vga.mem.linear+addr+vop_offset)) = val;
+            default: /* Should not happen */
                 break;
         };
 	}
 
     /* byte-wise */
 	Bitu readb(PhysPt addr) {
-        return readc<uint8_t>(addr);
+        return readc<uint8_t>(PAGING_GetPhysicalAddress(addr));
     }
 	void writeb(PhysPt addr,Bitu val) {
-        writec<uint8_t>(addr,(uint8_t)val);
+        writec<uint8_t>(PAGING_GetPhysicalAddress(addr),(uint8_t)val);
     }
 
     /* word-wise.
      * in the style of the 8086, non-word-aligned I/O is split into byte I/O */
 	Bitu readw(PhysPt addr) {
+		addr = PAGING_GetPhysicalAddress(addr);
         if (!(addr & 1)) /* if WORD aligned */
             return readc<uint16_t>(addr);
         else {
@@ -1998,6 +2030,7 @@ public:
         }
     }
 	void writew(PhysPt addr,Bitu val) {
+		addr = PAGING_GetPhysicalAddress(addr);
         if (!(addr & 1)) /* if WORD aligned */
             writec<uint16_t>(addr,(uint16_t)val);
         else {
@@ -2469,6 +2502,11 @@ static struct vg {
 	VGA_MMIO_Handler			mmio;
 	VGA_AMS_Handler				ams;
     VGA_PC98_PageHandler        pc98;
+	VGA_PC98_TEXT_PageHandler   pc98_text;
+	VGA_PC98_CG_PageHandler     pc98_cg;
+	VGA_PC98_256MMIO_PageHandler pc98_256mmio;
+	VGA_PC98_256BANK_PageHandler<0> pc98_256bank0;
+	VGA_PC98_256BANK_PageHandler<1> pc98_256bank1;	
 	VGA_Empty_Handler			empty;
 } vgaph;
 
@@ -2546,8 +2584,36 @@ void VGA_SetupHandlers(void) {
 		MEM_SetPageHandler( 0xb8, 8, &vgaph.ams );
 		goto range_done;
 	case EGAVGA_ARCH_CASE:
-    case PC98_ARCH_CASE:
 		break;
+    case PC98_ARCH_CASE:
+		MEM_SetPageHandler(             VGA_PAGE_A0 + 0x00, 0x02, &vgaph.pc98_text );/* A0000-A1FFFh text layer, character data */
+		MEM_SetPageHandler(             VGA_PAGE_A0 + 0x02, 0x02, &vgaph.pc98_text );/* A2000-A3FFFh text layer, attribute data + non-volatile RAM */
+		MEM_SetPageHandler(             VGA_PAGE_A0 + 0x04, 0x01, &vgaph.pc98_cg );/* A4000-A4FFFh character generator memory-mapped I/O */
+		MEM_ResetPageHandler_Unmapped(  VGA_PAGE_A0 + 0x05, 0x03);              /* A5000-A7FFFh not mapped */
+
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA)) {
+			MEM_SetPageHandler(             VGA_PAGE_A0 + 0x08, 0x08, &vgaph.pc98_256bank0 );/* A8000-AFFFFh graphics layer, bank 0 */
+			MEM_SetPageHandler(             VGA_PAGE_A0 + 0x10, 0x08, &vgaph.pc98_256bank1 );/* B0000-B7FFFh graphics layer, bank 1 */
+			MEM_ResetPageHandler_Unmapped(  VGA_PAGE_A0 + 0x18, 0x08);              /* B8000-BFFFFh graphics layer, not mapped */
+		}
+		else {
+			MEM_SetPageHandler(             VGA_PAGE_A0 + 0x08, 0x08, &vgaph.pc98 );/* A8000-AFFFFh graphics layer, B bitplane */
+			MEM_SetPageHandler(             VGA_PAGE_A0 + 0x10, 0x08, &vgaph.pc98 );/* B0000-B7FFFh graphics layer, R bitplane */
+			MEM_SetPageHandler(             VGA_PAGE_A0 + 0x18, 0x08, &vgaph.pc98 );/* B8000-BFFFFh graphics layer, G bitplane */
+		}
+
+		/* E0000-E7FFFh graphics layer
+		 *  - In 8-color mode, E0000-E7FFFh is not mapped
+		 *  - In 16-color mode, E0000-E7FFFh is the 4th bitplane (E)
+		 *  - In 256-color mode, E0000-E7FFFh is memory-mapped I/O that controls the 256-color mode */
+		if (pc98_gdc_vramop & (1 << VOPBIT_VGA))
+			MEM_SetPageHandler(0xE0, 8, &vgaph.pc98_256mmio );
+		else if (pc98_gdc_vramop & (1 << VOPBIT_ANALOG))
+			MEM_SetPageHandler(0xE0, 8, &vgaph.pc98 );
+		else
+			MEM_ResetPageHandler_Unmapped(0xE0, 8);
+
+		goto range_done;
 	default:
 		LOG_MSG("Illegal machine type %d", machine );
 		return;
@@ -2610,20 +2676,6 @@ void VGA_SetupHandlers(void) {
 	case M_CGA4:
 		newHandler = &vgaph.text;
 		break;
-    case M_PC98:
-		newHandler = &vgaph.pc98;
-
-		if (pc98_gdc_vramop & (1 << VOPBIT_VGA))
-			/* 256-color mode changes A8000h-B7FFFh from planar to packed, B8000h-BFFFFh is disconnected.
-			 * A8000h is bank 0 and B0000h is bank 1, controlled by bank switching registers.
-			 * E0000h becomes "memory mapped I/O" to control bank switching */
-			MEM_SetPageHandler(0xE0, 8, newHandler );
-		else if (pc98_gdc_vramop & (1 << VOPBIT_ANALOG)) /* 16-color mode makes E000:0000 appear */
-			MEM_SetPageHandler(0xE0, 8, newHandler );
-		else
-			MEM_ResetPageHandler_Unmapped(0xE0, 8);
-
-        break;
 	case M_AMSTRAD:
 		newHandler = &vgaph.map;
 		break;
