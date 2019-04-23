@@ -93,7 +93,20 @@ void VGA_DAC_UpdateColor( Bitu index ) {
 		VGA_DAC_SendColor( index, maskIndex );
 	}
     else {
-        VGA_DAC_SendColor( index, index );
+        switch (vga.mode) {
+            case M_VGA:
+            case M_LIN8:
+                maskIndex = index & vga.dac.pel_mask;
+                VGA_DAC_SendColor( index, maskIndex );
+                break;
+            default:
+                /* Remember the lookup table is there to handle the color palette AND the DAC mask AND the attribute controller palette */
+                /* FIXME: Is it: index -> attribute controller -> dac mask, or
+                 *               index -> dac mask -> attribute controller? */
+                maskIndex = vga.dac.combine[index&0xF] & vga.dac.pel_mask;
+                VGA_DAC_SendColor( index, maskIndex );
+                break;
+        }
     }
 }
 
