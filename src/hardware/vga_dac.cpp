@@ -81,7 +81,7 @@ static void VGA_DAC_SendColor( Bitu index, Bitu src ) {
 void VGA_DAC_UpdateColor( Bitu index ) {
 	Bitu maskIndex;
 
-    if (IS_EGA_ARCH) {
+    if (IS_EGA_ARCH || IS_PC98_ARCH) {
         VGA_DAC_SendColor( index, index );
     }
 	else if (machine == MCH_MCGA) {
