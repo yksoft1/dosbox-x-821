@@ -5150,13 +5150,13 @@ bool VM_Boot_DOSBox_Kernel() {
 		void DOS_Startup(Section* sec);
 		DOS_Startup(NULL);
 
-		void update_pc98_function_row(bool enable);
+		void update_pc98_function_row(unsigned char setting,bool force_redraw=false);
 		
 		void DRIVES_Startup(Section *s);
 		DRIVES_Startup(NULL);
 
 		/* NEC's function key row seems to be deeply embedded in the CON driver. Am I wrong? */
-		if (IS_PC98_ARCH) update_pc98_function_row(true);
+		if (IS_PC98_ARCH) update_pc98_function_row(1);
 
 		DispatchVMEvent(VM_EVENT_DOS_INIT_KERNEL_READY); // <- kernel is ready
 

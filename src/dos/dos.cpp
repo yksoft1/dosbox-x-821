@@ -2351,6 +2351,9 @@ public:
 						dos.version.major, dos.version.minor);
 			}
 		}
+
+		void PC98_InitDefFuncRow(void);
+		PC98_InitDefFuncRow();
 	}
 	~DOS(){
 		/* NTS: We do NOT free the drives! The OS may use them later! */
@@ -2395,7 +2398,7 @@ void DOS_ShutdownDrives() {
 	}
 }
 
-void update_pc98_function_row(bool enable);
+void update_pc98_function_row(unsigned char setting,bool force_redraw=false);
 void DOS_UnsetupMemory();
 void DOS_Casemap_Free();
 
@@ -2405,7 +2408,7 @@ void DOS_DoShutDown() {
 		test = NULL;
 	}
 	
-	if (IS_PC98_ARCH) update_pc98_function_row(false);
+	if (IS_PC98_ARCH) update_pc98_function_row(0);
 
     DOS_UnsetupMemory();
     DOS_Casemap_Free();
