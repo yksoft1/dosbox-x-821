@@ -110,8 +110,8 @@ static struct {
 Bits PageFaultCore(void) {
 	CPU_CycleLeft+=CPU_Cycles;
 	CPU_Cycles=1;
-//	Bits ret=CPU_Core_Full_Run();
-	Bits ret=CPU_Core_Normal_Run();
+	Bits ret=CPU_Core_Full_Run();
+//	Bits ret=CPU_Core_Normal_Run();
 	CPU_CycleLeft+=CPU_Cycles;
 	if (ret<0) E_Exit("Got a dosbox close machine in pagefault core?");
 	if (ret) 
@@ -271,6 +271,8 @@ bool dosbox_enable_nonrecursive_page_fault = true;	/* user option */
 bool dosbox_allow_nonrecursive_page_fault = false;	/* when set, do nonrecursive mode (when executing instruction) */
 Bitu dosbox_check_nonrecursive_pf_cs,dosbox_check_nonrecursive_pf_eip;
 
+bool CPU_IsDynamicCore(void);
+
 // PAGING_NewPageFault
 // lin_addr, page_addr: the linear and page address the fault happened at
 // prepare_only: true in case the calling core handles the fault, else the PageFaultCore does
@@ -282,7 +284,7 @@ static void PAGING_NewPageFault(PhysPt lin_addr, Bitu page_addr, bool prepare_on
 	if (prepare_only) {
 		cpu.exception.which = EXCEPTION_PF;
 		cpu.exception.error = faultcode;
-	} else if (dosbox_enable_nonrecursive_page_fault && dosbox_allow_nonrecursive_page_fault) {
+	} else if (dosbox_enable_nonrecursive_page_fault && dosbox_allow_nonrecursive_page_fault && !CPU_IsDynamicCore()) {
 		/* FIXME: Apparently, if Window 98/ME executes a floating point instruction that triggers a page
 		 *        fault and DOSBox is running the dynamic core, this code will throw the exception and
 		 *        the Normal_Loop() function farther up the call chain will not receive the exception,
