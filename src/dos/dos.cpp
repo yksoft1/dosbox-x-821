@@ -2282,7 +2282,7 @@ public:
 		DOS_SetupMemory();								/* Setup first MCB */
 		
         if (minimum_mcb_free == 0)
-            minimum_mcb_free = 0x800;
+            minimum_mcb_free = 0x100;
         else if (minimum_mcb_free < minimum_mcb_segment)
             minimum_mcb_free = minimum_mcb_segment;
 
