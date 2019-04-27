@@ -3164,12 +3164,8 @@ static Bitu INTDC_PC98_Handler(void) {
 			else if (reg_ax == 0x00) { /* Read all state, DS:DX = data to store to */
 				/* DS:DX contains
 				 *       16*10 bytes, 16 bytes per entry for function keys F1-F10
-				 *       16*5 bytes, 16 bytes per entry for VF1-VF5
 				 *       16*10 bytes, 16 bytes per entry for function key shortcuts Shift+F1 to Shift+F10
-				 *       16*5 bytes, 16 bytes per entry for shift VF1-VF5
 				 *       6*11 bytes, 6 bytes per entry for editor keys
-				 *       16*10 bytes, 16 bytes per entry for function key shortcuts Control+F1 to Control+F10
-				 *       16*5 bytes, 16 bytes per entry for control VF1-VF5
 				 *
 				 * For whatever reason, the buffer is copied to the DOS buffer +1, meaning that on write it skips the 0x08 byte. */
 				Bitu ofs = (Bitu)(SegValue(ds) << 4ul) + (Bitu)reg_dx;
@@ -3195,7 +3191,8 @@ static Bitu INTDC_PC98_Handler(void) {
 				 *       16*10 bytes, 16 bytes per entry for function key shortcuts Shift+F1 to Shift+F10
 				 *       16*5 bytes, 16 bytes per entry for shift VF1-VF5
 				 *       6*11 bytes, 6 bytes per entry for editor keys
-				 *       16*15 bytes, 16 bytes per entry of unknown relevence
+				 *       16*10 bytes, 16 bytes per entry for function key shortcuts Control+F1 to Control+F10
+				 *       16*5 bytes, 16 bytes per entry for control VF1-VF5
 				 *
 				 * For whatever reason, the buffer is copied to the DOS buffer +1, meaning that on write it skips the 0x08 byte. */
 				Bitu ofs = (Bitu)(SegValue(ds) << 4ul) + (Bitu)reg_dx;
