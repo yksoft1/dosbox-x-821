@@ -1235,6 +1235,16 @@ static void DSP_ADC_CallBack(DmaChannel * /*chan*/, DMAEvent event) {
 	ch->Register_Callback(0);
 }
 
+static void DSP_ChangeRate(Bitu freq) {
+	if (sb.freq!=freq && sb.dma.mode!=DSP_DMA_NONE) {
+		sb.chan->FillUp();
+		sb.chan->SetFreq(freq / (sb.mixer.stereo ? 2 : 1));
+		sb.dma.rate=(freq*sb.dma.mul) >> SB_SH;
+		sb.dma.min=(sb.dma.rate*3)/1000;
+	}
+	sb.freq=freq;
+}
+
 Bitu DEBUG_EnableDebugger(void);
 
 #define DSP_SB16_ONLY if (sb.type != SBT_16) { LOG(LOG_SB,LOG_ERROR)("DSP:Command %2X requires SB16",sb.dsp.cmd); break; }
@@ -1665,14 +1675,9 @@ static void DSP_DoCommand(void) {
 		if (sb.midi == true) MIDI_RawOutByte(sb.dsp.in.data[0]);
 		break;
 	case 0x40:	/* Set Timeconstant */
-		sb.chan->FillUp();
-		sb.freq=(256000000 / (65536 - (sb.dsp.in.data[0] << 8)));
+		DSP_ChangeRate(256000000ul / (65536ul - ((unsigned int)sb.dsp.in.data[0] << 8u)));
 		sb.timeconst=sb.dsp.in.data[0];
         sb.freq_derived_from_tc=true;
-
-		/* Nasty kind of hack to allow runtime changing of frequency */
-		if (sb.dma.mode != DSP_DMA_NONE && sb.mode != MODE_DMA_PAUSE && sb.dma.autoinit)
-			DSP_PrepareDMA_Old(sb.dma.mode,sb.dma.autoinit,sb.dma.sign,sb.dsp.highspeed);
 
 		if (sb.ess_type != ESS_NONE) ESSUpdateFilterFromSB();
 		break;
@@ -1685,7 +1690,7 @@ static void DSP_DoCommand(void) {
 			DSP_SB16_ONLY;
 		}
 
-		sb.freq=(sb.dsp.in.data[0] << 8)  | sb.dsp.in.data[1];
+		DSP_ChangeRate(((unsigned int)sb.dsp.in.data[0] << 8u) | (unsigned int)sb.dsp.in.data[1]);
         sb.freq_derived_from_tc=false;
 		break;
 	case 0x48:	/* Set DMA Block Size */
