@@ -1640,6 +1640,7 @@ static IO_WriteHandleObject WriteHandler_8255_PC98[4];
 static IO_WriteHandleObject Reset_PC98;
 
 extern bool gdc_5mhz_mode;
+extern bool gdc_5mhz_mode_initial;
 
 bool PC98_SHUT0=true,PC98_SHUT1=true;
 
@@ -1685,7 +1686,10 @@ public:
          *       that offer toggling virtual versions of these DIP switches to see
          *       what the BIOS menu text says. */
        // return 0x63 | (gdc_5mhz_mode ? 0x80 : 0x00); // taken from a PC-9821 Lt2
-		return 0x63 | (gdc_5mhz_mode ? 0x00 : 0x80);
+        /* NTS: Return the INITIAL setting of the GDC. Guest applications (like Windows 3.1)
+		 *      can and will change it later. This must reflect the initial setting as if
+		 *      what the BIOS had initially intended. */
+		return 0x63 | (gdc_5mhz_mode_initial ? 0x00 : 0x80); // taken from a PC-9821 Lt2
     }
     /* port B is input */
     virtual uint8_t inPortB(void) const {
