@@ -112,7 +112,9 @@ CPPSRCS_MT32 = $(wildcard $(DBX_PATH)/src/mt32/*.cpp) \
 OBJS_MT32 = $(addsuffix .o,$(basename $(CPPSRCS_MT32)))
 
 CXXFLAGS_MT32 = -DC_MT32=1 -I$(DBX_PATH)/src/mt32 -I$(DBX_PATH)/src/mt32/freeverb -I$(DBX_PATH)/src/mt32/sha1
-	
+
+CXXFLAGS_SYNTH = -DC_FLUIDSYNTH=1
+
 OBJS = $(addsuffix .o,$(basename $(CPPSRCS)))
 LIBS = -static -lz -lpng -lm -lstdc++ 
 
@@ -138,6 +140,11 @@ ifeq ($(MT32),1)
 	CPPSRCS += $(CPPSRCS_MT32)
 	CXXFLAGS += $(CXXFLAGS_MT32)
 #	OBJS += $(OBJS_MT32)
+endif
+
+ifeq ($(SYNTH),1)
+	CXXFLAGS += $(CXXFLAGS_SYNTH)
+	LIBS += -lfluidsynth
 endif
 
 .SUFFIXES: .c.o
