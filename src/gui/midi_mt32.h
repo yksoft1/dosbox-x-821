@@ -124,12 +124,20 @@ public:
 		const MT32Emu::ROMImage *controlROMImage = MT32Emu::ROMImage::makeROMImage(&controlROMFile);
 		const MT32Emu::ROMImage *pcmROMImage = MT32Emu::ROMImage::makeROMImage(&pcmROMFile);
 		synth = new MT32Emu::Synth(&reportHandler);
+
+		Section_prop *section = static_cast<Section_prop *>(control->GetSection("midi"));
+		numPartials = section->Get_int("mt32.partials");
+		if(numPartials>256) numPartials=256;
+
+#if MT32EMU_VERSION_MAJOR == 2	
+		if (!synth->open(*controlROMImage, *pcmROMImage, numPartials)) {
+#else
 		if (!synth->open(*controlROMImage, *pcmROMImage)) {
+#endif
 			LOG(LOG_MISC,LOG_WARN)("MT32: Error initialising emulation");
 			return false;
 		}
 
-		Section_prop *section = static_cast<Section_prop *>(control->GetSection("midi"));
 		if (strcmp(section->Get_string("mt32.reverb.mode"), "auto") != 0) {
 			Bit8u reverbsysex[] = {0x10, 0x00, 0x01, 0x00, 0x05, 0x03};
 			reverbsysex[3] = (Bit8u)atoi(section->Get_string("mt32.reverb.mode"));
@@ -154,10 +162,10 @@ public:
 		renderInThread = strcmp(section->Get_string("mt32.thread"), "on") == 0;
 
 
-		numPartials = section->Get_int("mt32.partials");
-		if(numPartials>MT32EMU_MAX_PARTIALS) numPartials=MT32EMU_MAX_PARTIALS;
+#if MT32EMU_VERSION_MAJOR == 2	
+#else
 		synth->setPartialLimit(numPartials);
-
+#endif
 		chan = MIXER_AddChannel(mixerCallBack, MT32Emu::SAMPLE_RATE, "MT32");
 		if (renderInThread) {
 			mixerBufferSize = 0;

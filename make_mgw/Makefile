@@ -109,9 +109,16 @@ CPPSRCS_MT32 = $(wildcard $(DBX_PATH)/src/mt32/*.cpp) \
 			$(wildcard $(DBX_PATH)/src/mt32/freeverb/*.cpp) \
 			$(wildcard $(DBX_PATH)/src/mt32/sha1/*.cpp)
 
+CPPSRCS_MT32V23 = $(wildcard $(DBX_PATH)/src/mt32-v2.3/*.cpp) \
+			$(wildcard $(DBX_PATH)/src/mt32-v2.3/sha1/*.cpp)
+			
 OBJS_MT32 = $(addsuffix .o,$(basename $(CPPSRCS_MT32)))
 
+OBJS_MT32V23 = $(addsuffix .o,$(basename $(CPPSRCS_MT32V23)))
+
 CXXFLAGS_MT32 = -DC_MT32=1 -I$(DBX_PATH)/src/mt32 -I$(DBX_PATH)/src/mt32/freeverb -I$(DBX_PATH)/src/mt32/sha1
+
+CXXFLAGS_MT32V23 = -DC_MT32=1 -I$(DBX_PATH)/src/mt32-v2.3 -I$(DBX_PATH)/src/mt32-v2.3/sha1
 
 CXXFLAGS_SYNTH = -DC_FLUIDSYNTH=1
 
@@ -135,7 +142,14 @@ ifeq ($(OPENGL), 1)
 		LIBS += -lGL
 	endif
 endif
-	
+
+ifeq ($(MT32V23),1)
+	MT32 = 0
+	CPPSRCS += $(CPPSRCS_MT32V23)
+	CXXFLAGS += $(CXXFLAGS_MT32V23)
+#	OBJS += $(OBJS_MT32)
+endif
+
 ifeq ($(MT32),1)
 	CPPSRCS += $(CPPSRCS_MT32)
 	CXXFLAGS += $(CXXFLAGS_MT32)
@@ -166,4 +180,4 @@ $(DBX_PATH)/src/winres.rc.o: $(DBX_PATH)/src/winres.rc
 	$(WINDRES) -i $< -o $@
 	
 clean:
-	rm -f $(TARGET) $(OBJS) $(OBJS_MT32)
+	rm -f $(TARGET) $(OBJS) $(OBJS_MT32) $(OBJS_MT32V23)
