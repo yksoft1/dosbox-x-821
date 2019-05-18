@@ -125,11 +125,18 @@ CXXFLAGS_SYNTH = -DC_FLUIDSYNTH=1
 OBJS = $(addsuffix .o,$(basename $(CPPSRCS)))
 LIBS = -static -lz -lpng -lm -lstdc++ 
 
+SDLSOUND_EXTRALIBS = -lmikmod -lpthread -lvorbisfile -lvorbis -logg
+
 ifeq ($(SDL1), 1) 
 	LIBS += $(shell sdl-config --libs)
 	ifdef WINDIR
 		OBJS += $(DBX_PATH)/src/winres.rc.o
 		LIBS += -limm32
+	endif
+	
+	ifeq ($(SDLSOUND), 1)
+		CXXFLAGS += -DC_SDL_SOUND=1
+		LIBS += -lSDL_sound $(SDLSOUND_EXTRALIBS)
 	endif
 else
 	LIBS += $(shell sdl2-config --libs)
