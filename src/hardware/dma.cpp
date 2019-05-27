@@ -389,6 +389,7 @@ Bitu DmaController::ReadControllerReg(Bitu reg,Bitu /*len*/) {
 DmaChannel::DmaChannel(Bit8u num, bool dma16) {
 	masked = true;
 	callback = NULL;
+	page_bank_increment_wraparound = 0;
 	channum = num;
 	DMA16 = dma16 ? 0x1 : 0x0;
 
@@ -409,7 +410,6 @@ DmaChannel::DmaChannel(Bit8u num, bool dma16) {
 	autoinit = false;
 	tcount = false;
 	request = false;
-	page_bank_increment_wraparound = 0;
 }
 
 Bitu DmaChannel::Read(Bitu want, Bit8u * buffer) {
