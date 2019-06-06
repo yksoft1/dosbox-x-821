@@ -127,7 +127,15 @@ static Bitu MPU401_ReadStatus(Bitu port,Bitu iolen) {
 }
 
 static void MPU401_WriteCommand(Bitu port,Bitu val,Bitu iolen) {
-	if (mpu.state.reset) {mpu.state.cmd_pending=val+1;return;}
+	if (mpu.mode==M_UART && val!=0xff) return;
+	if (mpu.state.reset) {
+		if (mpu.state.cmd_pending || val!=0xff) {
+			mpu.state.cmd_pending=val+1;
+			return;
+		}
+		PIC_RemoveEvents(MPU401_ResetDone);
+		mpu.state.reset=false;
+	}
 	if (val<=0x2f) {
 		switch (val&3) { /* MIDI stop, start, continue */
 			case 1: {MIDI_RawOutByte(0xfc);break;}
@@ -605,7 +613,7 @@ static void MPU401_Reset(void) {
 	mpu.state.cmask=0xff;
 	mpu.state.amask=mpu.state.tmask=0;
 	mpu.state.midi_mask=0xffff;
-	mpu.state.data_onoff=0;
+	mpu.state.data_onoff=-1;
 	mpu.state.command_byte=0;
 	mpu.state.block_ack=false;
 	mpu.clock.tempo=mpu.clock.old_tempo=100;
