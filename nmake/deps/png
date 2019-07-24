@@ -1,5 +1,5 @@
-CC		=	cl
-CXX		=   cl
+CC		=	cl -nologo
+CXX		=   cl -nologo
 LD		= 	link
 LIBR	=	lib
 WINDRES =	rc
@@ -8,11 +8,11 @@ ZLIB = ..\..\vs2015\zlib
 
 LPNG = ..\..\vs2015\libpng
 
-CXXFLAGS =  -nologo -O2 -MT -GL -DNDEBUG -I$(ZLIB)
+CXXFLAGS =  -O2 -MT -DNDEBUG -I$(ZLIB)
 
-CFLAGS	=	-nologo -O2 -MT -GL -DNDEBUG -I$(ZLIB)
+CFLAGS	=	-O2 -MT -DNDEBUG -I$(ZLIB)
 
-LFLAGS	=	-nologo -LTCG
+LFLAGS	=	-nologo 
 
 TARGET	=	png.lib
 

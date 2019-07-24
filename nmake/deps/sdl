@@ -1,16 +1,16 @@
-CC		=	cl
-CXX		=   cl
+CC		=	cl -nologo
+CXX		=   cl -nologo
 LD		= 	link
 LIBR	=	lib
 WINDRES =	rc
 
 SDLDIR = ..\..\vs2015\sdl
 
-CXXFLAGS =  -nologo -O2 -MT -GL -DNDEBUG -DNO_STDIO_REDIRECT -D_WIN32_WINNT=0x0501 -I$(SDLDIR)\include
+CXXFLAGS =  -O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -D_WIN32_WINNT=0x0501 -I$(SDLDIR)\include
 
-CFLAGS	=	-nologo -O2 -MT -GL -DNDEBUG -DNO_STDIO_REDIRECT -D_WIN32_WINNT=0x0501 -I$(SDLDIR)\include
+CFLAGS	=	-O2 -MT -DNDEBUG -DNO_STDIO_REDIRECT -D_WIN32_WINNT=0x0501 -I$(SDLDIR)\include
 
-LFLAGS	=	-nologo -LTCG
+LFLAGS	=	-nologo 
 
 TARGET	=	sdl.lib
 

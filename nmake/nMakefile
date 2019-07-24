@@ -1,5 +1,5 @@
-CC		=	cl
-CXX		=   cl
+CC		=	cl -nologo
+CXX		=   cl -nologo
 LD		= 	link
 LIBR	=	lib
 WINDRES =	rc
@@ -12,7 +12,7 @@ ZLIB = ..\vs2015\zlib
 
 LPNG = ..\vs2015\libpng
 
-CXXFLAGS =  -nologo -O2 -MT -GL -EHsc -DNDEBUG -DWIN32 -D__WIN32__ -D_FILE_OFFSET_BITS=64 -DC_OPENGL=1 -DC_DYNREC=1 -DC_MT32=1 -I. \
+CXXFLAGS =  -O2 -MT -EHsc -DNDEBUG -DWIN32 -D__WIN32__ -D_FILE_OFFSET_BITS=64 -DC_OPENGL=1 -DC_DYNREC=1 -DC_MT32=1 -I. \
 			-D_WIN32_WINNT=0x0501 \
 			-Dmain=SDL_main -I$(SDLDIR)\include \
 			-I$(LPNG) -I$(ZLIB) \
@@ -27,7 +27,7 @@ CXXFLAGS =  -nologo -O2 -MT -GL -EHsc -DNDEBUG -DWIN32 -D__WIN32__ -D_FILE_OFFSE
 			-I$(DBX_PATH)/src/hardware/snd_pc98/x11 \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/cbus 
 
-CFLAGS	=	-nologo -O2 -MT -GL -DNDEBUG -DWIN32 -D_WIN32_WINNT=0x0501 -I. \
+CFLAGS	=	-O2 -MT -DNDEBUG -DWIN32 -D_WIN32_WINNT=0x0501 -I. \
 			-Dmain=SDL_main -I$(SDLDIR)\include \
 			-I$(LPNG) -I$(ZLIB) \
 			-I$(DBX_PATH) \
@@ -41,7 +41,7 @@ CFLAGS	=	-nologo -O2 -MT -GL -DNDEBUG -DWIN32 -D_WIN32_WINNT=0x0501 -I. \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/x11 \
 			-I$(DBX_PATH)/src/hardware/snd_pc98/cbus 
 
-LFLAGS	=	-nologo -LTCG -SUBSYSTEM:Windows,"5.01"
+LFLAGS	=	-nologo -SUBSYSTEM:Windows,"5.01"
 
 TARGET	=	dosbox-x.exe
 
@@ -336,6 +336,12 @@ CXXFLAGS = $(CXXFLAGS) -I$(DBX_PATH)/src/mt32-v2.3
 !ELSE
 OBJS4 = $(OBJS4) $(OBJS_MT32)
 CXXFLAGS = $(CXXFLAGS) -I$(DBX_PATH)/src/mt32
+!ENDIF
+
+!IFDEF LTCG
+CXXFLAGS = $(CXXFLAGS) -GL
+CFLAGS = $(CFLAGS) -GL
+LFLAGS = $(LFLAGS) -LTCG
 !ENDIF
 
 LIBS = kernel32.lib user32.lib gdi32.lib imm32.lib winmm.lib dxguid.lib shell32.lib comdlg32.lib opengl32.lib advapi32.lib ws2_32.lib deps\sdl.lib deps\sdlmain.lib deps\z.lib deps\png.lib
