@@ -33,6 +33,14 @@ OBJS	=	$(LPNG)\png.obj \
 			$(LPNG)\pngwtran.obj \
 			$(LPNG)\pngwutil.obj
 
+!IFDEF SSE2
+CFLAGS = -arch:SSE2 $(CFLAGS)
+CXXFLAGS = -arch:SSE2 $(CXXFLAGS)
+!ELSE
+CFLAGS = -arch:IA32 $(CFLAGS)
+CXXFLAGS = -arch:IA32 $(CXXFLAGS)
+!ENDIF
+
 .SUFFIXES: .c.o
 .SUFFIXES: .cpp.o
 
