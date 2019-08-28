@@ -209,10 +209,8 @@ void DOS_SetupTables(void) {
 	dos.tables.dpb_size=0x21;  // bytes per DPB entry (MS-DOS 4.x-6.x size)
 	dos.tables.mediaid_offset=0x17; // media ID offset in DPB (MS-DOS 4.x-6.x case)
 
-	dos.tables.mediaid=RealMake(DOS_GetMemory(4,"dos.tables.mediaid"),0);
 	dos.tables.tempdta=RealMake(DOS_GetMemory(4,"dos.tables.tempdta"),0);
 	dos.tables.tempdta_fcbdelete=RealMake(DOS_GetMemory(4,"dos.tables.fcbdelete"),0);
-	for (i=0;i<DOS_DRIVES;i++) mem_writew(Real2Phys(dos.tables.mediaid)+i*2,0);
 	/* Create the DOS Info Block */
 	dos_infoblock.SetLocation(DOS_INFOBLOCK_SEG); //c2woody
    
@@ -328,7 +326,7 @@ void DOS_SetupTables(void) {
         if ((i+1) < DOS_DRIVES)
             real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,RealMake(dos.tables.dpb,(i+1)*dos.tables.dpb_size));
         else
-            real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,0xFFFFFFFF); // ED4.EXE (provided by yksoft1) expects this, or else loops forever);
+            real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,0xFFFFFFFF); // ED4.EXE (provided by yksoft1) expects this, or else loops forever
 	}
 	dos_infoblock.SetFirstDPB(RealMake(dos.tables.dpb,0));
 
