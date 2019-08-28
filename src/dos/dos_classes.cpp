@@ -158,6 +158,10 @@ void DOS_InfoBlock::SetUMBChainState(Bit8u _umbchaining) {
 	sSave(sDIB,chainingUMB,_umbchaining);
 }
 
+void DOS_InfoBlock::SetFirstDPB(Bit32u _first_dpb) {
+	sSave(sDIB,firstDPB,_first_dpb);
+}
+	
 RealPt DOS_InfoBlock::GetPointer(void) {
 	return RealMake(seg,offsetof(sDIB,firstDPB));
 }
