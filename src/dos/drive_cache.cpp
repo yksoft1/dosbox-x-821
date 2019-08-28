@@ -497,10 +497,10 @@ void DOS_Drive_Cache::CreateShortName(CFileInfo* curDir, CFileInfo* info) {
 
 	// Remove Spaces
 	strcpy(tmpName,info->orgname);
-	if (IS_PC98_ARCH)
-		shiftjis_upcase(tmpName);
-	else
-		upcase(tmpName);
+    if (IS_PC98_ARCH)
+    	shiftjis_upcase(tmpName);
+    else
+    	upcase(tmpName);
 	createShort = RemoveSpaces(tmpName);
 
 	// Get Length of filename
@@ -617,6 +617,8 @@ DOS_Drive_Cache::CFileInfo* DOS_Drive_Cache::FindDirInfo(const char* path, char*
 	};
 
 	do {
+// TODO: In PC-98 mode, use a Shift-JIS aware version of strchr() to find the path separator.
+//       It's possible for the host path separator to appear in the trailing end of a double-byte character.
 //		bool errorcheck = false;
 		pos = strchr(start,CROSS_FILESPLIT);
 		if (pos) { safe_strncpy(dir,start,pos-start+1); /*errorcheck = true;*/ }

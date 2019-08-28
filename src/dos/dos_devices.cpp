@@ -225,9 +225,9 @@ void DOS_ShutdownDevices(void) {
 			Devices[i] = NULL;
 		}
 	}
-	
-	/* NTS: CON counts as a device */
-	if (IS_PC98_ARCH) update_pc98_function_row(0);	
+
+    /* NTS: CON counts as a device */
+    if (IS_PC98_ARCH) update_pc98_function_row(0);
 }
 
 // INT 29h emulation needs to keep track of CON
@@ -298,4 +298,4 @@ Bitu INT29_HANDLER(void) {
 	}
 
 	return CBRET_NONE;
-} 
+}

@@ -16,6 +16,7 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -69,33 +70,18 @@ private:
 //       for people who compile this code for Windows 95 or earlier where some
 //       widechar functions are missing.
 typedef wchar_t host_cnv_char_t;
-
-
 # define host_cnv_use_wchar
 # define _HT(x) L##x
-#ifndef __MINGW32__
-# define ht_stat_t struct _stat64i32 /* WTF Microsoft?? Why aren't _stat and _wstat() consistent on stat struct type? */
-# define ht_stat(x,y) _wstat64i32(x,y)
-#else
-#ifdef _wstati64
-# define ht_stat_t struct _stati64 /* WTF Microsoft?? Why aren't _stat and _wstat() consistent on stat struct type? */
-# define ht_stat(x,y) _wstati64(x,y)
-#else
-#ifdef wstat
-//#error "No _wstati64"
-# define ht_stat_t struct stat /* WTF Microsoft?? Why aren't _stat and _wstat() consistent on stat struct type? */
-# define ht_stat(x,y) wstat(x,y)
-#else
-# define ht_stat_t struct _stat
-# define ht_stat(x,y) _wstat(x,y)
-#endif
-#endif
-#endif
+# if defined(__MINGW32__) /* TODO: Get MinGW to support 64-bit file offsets, at least targeting Windows XP! */
+#  define ht_stat_t struct _stat
+#  define ht_stat(x,y) _wstat(x,y)
+# else
+#  define ht_stat_t struct _stat64i32 /* WTF Microsoft?? Why aren't _stat and _wstat() consistent on stat struct type? */
+#  define ht_stat(x,y) _wstat64i32(x,y)
+# endif
 # define ht_access(x,y) _waccess(x,y)
 # define ht_strdup(x) _wcsdup(x)
 # define ht_unlink(x) _wunlink(x)
-
-
 #else
 // Linux: Use UTF-8
 typedef char host_cnv_char_t;
@@ -379,6 +365,7 @@ bool localDrive::FileCreate(DOS_File * * file,const char * name,Bit16u /*attribu
     host_cnv_char_t *host_name = CodePageGuestToHost(temp_name);
     if (host_name == NULL) {
         LOG_MSG("%s: Filename '%s' from guest is non-representable on the host filesystem through code page conversion",__FUNCTION__,newname);
+		DOS_SetError(DOSERR_FILE_NOT_FOUND); // FIXME
         return false;
     }
 
@@ -453,6 +440,7 @@ bool localDrive::FileOpen(DOS_File * * file,const char * name,Bit32u flags) {
     host_cnv_char_t *host_name = CodePageGuestToHost(newname);
     if (host_name == NULL) {
         LOG_MSG("%s: Filename '%s' from guest is non-representable on the host filesystem through code page conversion",__FUNCTION__,newname);
+		DOS_SetError(DOSERR_FILE_NOT_FOUND);
         return false;
     }
 
@@ -548,6 +536,7 @@ bool localDrive::FileUnlink(const char * name) {
     host_cnv_char_t *host_name = CodePageGuestToHost(fullname);
     if (host_name == NULL) {
         LOG_MSG("%s: Filename '%s' from guest is non-representable on the host filesystem through code page conversion",__FUNCTION__,fullname);
+		DOS_SetError(DOSERR_FILE_NOT_FOUND);
         return false;
     }
 
@@ -695,11 +684,11 @@ again:
 
 	if(strlen(dir_entcopy)<DOS_NAMELENGTH_ASCII){
 		strcpy(find_name,dir_entcopy);
-		if (IS_PC98_ARCH)
-			shiftjis_upcase(find_name);
-		else
-			upcase(find_name);
-	} 
+        if (IS_PC98_ARCH)
+            shiftjis_upcase(find_name);
+        else
+            upcase(find_name);
+    } 
 
 	find_size=(Bit32u) stat_block.st_size;
 	struct tm *time;
@@ -715,6 +704,7 @@ again:
 }
 
 bool localDrive::GetFileAttr(const char * name,Bit16u * attr) {
+
 	char newname[CROSS_LEN];
 	strcpy(newname,basedir);
 	strcat(newname,name);
@@ -725,6 +715,7 @@ bool localDrive::GetFileAttr(const char * name,Bit16u * attr) {
     host_cnv_char_t *host_name = CodePageGuestToHost(newname);
     if (host_name == NULL) {
         LOG_MSG("%s: Filename '%s' from guest is non-representable on the host filesystem through code page conversion",__FUNCTION__,newname);
+		DOS_SetError(DOSERR_FILE_NOT_FOUND);
         return false;
     }
 
@@ -750,6 +741,7 @@ bool localDrive::MakeDir(const char * dir) {
     host_cnv_char_t *host_name = CodePageGuestToHost(temp_name);
     if (host_name == NULL) {
         LOG_MSG("%s: Filename '%s' from guest is non-representable on the host filesystem through code page conversion",__FUNCTION__,newdir);
+		DOS_SetError(DOSERR_FILE_NOT_FOUND); // FIXME
         return false;
     }
 
@@ -775,6 +767,7 @@ bool localDrive::RemoveDir(const char * dir) {
     host_cnv_char_t *host_name = CodePageGuestToHost(temp_name);
     if (host_name == NULL) {
         LOG_MSG("%s: Filename '%s' from guest is non-representable on the host filesystem through code page conversion",__FUNCTION__,newdir);
+		DOS_SetError(DOSERR_FILE_NOT_FOUND);
         return false;
     }
 
@@ -788,6 +781,7 @@ bool localDrive::RemoveDir(const char * dir) {
 }
 
 bool localDrive::TestDir(const char * dir) {
+
 	char newdir[CROSS_LEN];
 	strcpy(newdir,basedir);
 	strcat(newdir,dir);
@@ -832,6 +826,7 @@ bool localDrive::Rename(const char * oldname,const char * newname) {
     ht = CodePageGuestToHost(newold);
     if (ht == NULL) {
         LOG_MSG("%s: Filename '%s' from guest is non-representable on the host filesystem through code page conversion",__FUNCTION__,newold);
+		DOS_SetError(DOSERR_FILE_NOT_FOUND);
         return false;
     }
     host_cnv_char_t *o_temp_name = ht_strdup(ht);
@@ -841,6 +836,7 @@ bool localDrive::Rename(const char * oldname,const char * newname) {
     if (ht == NULL) {
         free(o_temp_name);
         LOG_MSG("%s: Filename '%s' from guest is non-representable on the host filesystem through code page conversion",__FUNCTION__,newnew);
+		DOS_SetError(DOSERR_FILE_NOT_FOUND); // FIXME
         return false;
     }
     host_cnv_char_t *n_temp_name = ht_strdup(ht);
@@ -869,6 +865,7 @@ bool localDrive::AllocationInfo(Bit16u * _bytes_sector,Bit8u * _sectors_cluster,
 }
 
 bool localDrive::FileExists(const char* name) {
+
 	char newname[CROSS_LEN];
 	strcpy(newname,basedir);
 	strcat(newname,name);
@@ -889,6 +886,7 @@ bool localDrive::FileExists(const char* name) {
 }
 
 bool localDrive::FileStat(const char* name, FileStat_Block * const stat_block) {
+
 	char newname[CROSS_LEN];
 	strcpy(newname,basedir);
 	strcat(newname,name);
@@ -1020,7 +1018,8 @@ bool localFile::Read(Bit8u * data,Bit16u * size) {
 }
 
 bool localFile::Write(Bit8u * data,Bit16u * size) {
-	if ((this->flags & 0xf) == OPEN_READ) {	// check if file opened in read-only mode
+	Bit32u lastflags = this->flags & 0xf;
+	if (lastflags == OPEN_READ || lastflags == OPEN_READ_NO_MOD) {	// check if file opened in read-only mode
 		DOS_SetError(DOSERR_ACCESS_DENIED);
 		return false;
 	}
@@ -1125,7 +1124,7 @@ bool localFile::Close() {
 		tim.tm_year = (date>>9)+1980-1900;
 		// sanitize the date in case of invalid timestamps (such as 0x0000 date/time fields)
 		if (tim.tm_mon < 0) tim.tm_mon = 0;
-		if (tim.tm_mday == 0) tim.tm_mday = 1;		
+		if (tim.tm_mday == 0) tim.tm_mday = 1;
 		//  have the C run-time library code compute whether standard time or daylight saving time is in effect.
 		tim.tm_isdst = -1;
 		// serialize time
@@ -1143,7 +1142,7 @@ bool localFile::Close() {
 		strcat(fullname, name);
 //		Dos_SpecoalChar(fullname, true);
 		CROSS_FILENAME(fullname);
-
+		
 		// guest to host code page translation
 		host_cnv_char_t *host_name = CodePageGuestToHost(fullname);
 		if (host_name == NULL) {
@@ -1156,8 +1155,8 @@ bool localFile::Close() {
 #else
 		if (utime(host_name, &ftim)) {
 #endif
-//			extern int errno; 
-//			LOG_MSG("Set time failed for %s (%s)", fullname, strerror(errno));
+			extern int errno; 
+			LOG_MSG("Set time failed for %s (%s)", fullname, strerror(errno));
 			return false;
 		}
 	}

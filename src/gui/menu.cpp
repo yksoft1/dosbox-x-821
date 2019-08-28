@@ -402,8 +402,9 @@ void Mount_Img_Floppy(char drive, std::string realpath) {
 				std::vector<std::string>::size_type i;
 				std::vector<DOS_Drive*>::size_type ct;
 				
+				std::vector<std::string> option ;
 				for (i = 0; i < paths.size(); i++) {
-					DOS_Drive* newDrive = new fatDrive(paths[i].c_str(),sizes[0],sizes[1],sizes[2],sizes[3]);
+					DOS_Drive* newDrive = new fatDrive(paths[i].c_str(),sizes[0],sizes[1],sizes[2],sizes[3], option);
 					imgDisks.push_back(newDrive);
 					if(!(dynamic_cast<fatDrive*>(newDrive))->created_successfully) {
 						LOG_MSG("Can't create drive from file.");
@@ -582,9 +583,10 @@ void Mount_Img_HDD(char drive, std::string realpath) {
 	std::vector<DOS_Drive*> imgDisks;
 	std::vector<std::string>::size_type i;
 	std::vector<DOS_Drive*>::size_type ct;
-				
+	
+	std::vector<std::string> option ;
 	for (i = 0; i < paths.size(); i++) {
-		DOS_Drive* newDrive = new fatDrive(paths[i].c_str(),sizes[0],sizes[1],sizes[2],sizes[3]);
+		DOS_Drive* newDrive = new fatDrive(paths[i].c_str(),sizes[0],sizes[1],sizes[2],sizes[3], option);
 		imgDisks.push_back(newDrive);
 		if(!(dynamic_cast<fatDrive*>(newDrive))->created_successfully) {
 			LOG_MSG("Can't create drive from file.");

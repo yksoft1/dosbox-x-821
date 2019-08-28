@@ -42,7 +42,7 @@ void PC98_GetVFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int
 void PC98_GetShiftVFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
 void PC98_GetCtrlFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
 void PC98_GetCtrlVFuncKeyEscape(size_t &len,unsigned char buf[16],const unsigned int i);
-
+	
 ShiftJISDecoder con_sjis;
 
 Bit16u last_int16_code = 0;
@@ -85,8 +85,8 @@ private:
 		
 		void Disable() {
             if (!IS_PC98_ARCH)
-                 enabled = false;
-
+                enabled = false;
+				  
 			attr = DefaultANSIAttr();
 		}
 	} ansi;
@@ -229,7 +229,7 @@ private:
 			case 0x37: // ROLL DOWN
 			case 0x38: // INS
             case 0x39: // DEL
-			case 0x3A: // UP ARROW
+            case 0x3A: // UP ARROW
 			case 0x3B: // LEFT ARROW
 			case 0x3C: // RIGHT ARROW
 			case 0x3D: // DOWN ARROW
@@ -237,15 +237,15 @@ private:
 			case 0x3F: // HELP
 			case 0x40: // KEYPAD -
 				PC98_GetEditorKeyEscape(/*&*/esclen,dev_con_readbuf,code); dev_con_pos=0; dev_con_max=esclen;
-				return (dev_con_max != 0)?true:false;	
+				return (dev_con_max != 0)?true:false;
 			case 0x52: // VF1
 			case 0x53: // VF2
 			case 0x54: // VF3
 			case 0x55: // VF4
 			case 0x56: // VF5
 				PC98_GetVFuncKeyEscape(/*&*/esclen,dev_con_readbuf,code+1-0x52); dev_con_pos=0; dev_con_max=esclen;
-				return (dev_con_max != 0)?true:false;				
-			case 0x62: // F1
+				return (dev_con_max != 0)?true:false;
+            case 0x62: // F1
             case 0x63: // F2
             case 0x64: // F3
             case 0x65: // F4
@@ -329,7 +329,7 @@ private:
 			case 0xC5: // VF4
 			case 0xC6: // VF5
 				PC98_GetShiftVFuncKeyEscape(/*&*/esclen,dev_con_readbuf,code+1-0xC2); dev_con_pos=0; dev_con_max=esclen;
-				return (dev_con_max != 0)?true:false;	
+				return (dev_con_max != 0)?true:false;
 			case 0xD2: // VF1
 			case 0xD3: // VF2
 			case 0xD4: // VF3
@@ -429,6 +429,7 @@ private:
 		reg_cx=oldcx;
 	}//static void Real_WriteChar(cur_col,cur_row,page,chr,attr,useattr)
 
+	
 	static void LineFeedRev(void) { // ESC M
 		BIOS_NCOLS;BIOS_NROWS;
 		Bit8u defattr = DefaultANSIAttr();
@@ -464,7 +465,7 @@ private:
 
 		Real_INT10_SetCursorPos(cur_row,cur_col,page);	
 	}
-
+	
 	static void AdjustCursorPosition(Bit8u& cur_col,Bit8u& cur_row) {
 		BIOS_NCOLS;BIOS_NROWS;
 		Bit8u defattr = DefaultANSIAttr();
@@ -707,7 +708,7 @@ bool device_CON::Read(Bit8u * data,Bit16u * size) {
             if (IS_PC98_ARCH) {
                 /* PC-98 does NOT return scan code, but instead returns nothing or
                  * control/escape code */
-                CommonPC98ExtScanConversionToReadBuf(reg_ah);
+				CommonPC98ExtScanConversionToReadBuf(reg_ah);
             }
             else {
                 /* IBM PC/XT/AT signals extended code by entering AL, AH.
@@ -740,15 +741,15 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
     Bit8u col,row;
 
     INT10_SetCurMode();
-
+	
     if (IS_PC98_ARCH) {
         ansi.enabled = true; // ANSI is enabled at all times
         ansi.attr = mem_readb(0x71D); // 60:11D
     }
-	
+	 
     while (*size>count) {
         if (log_dev_con) {
-            if (log_dev_con_str.size() >= 255 || data[count] == '\n') {
+            if (log_dev_con_str.size() >= 255 || data[count] == '\n' || data[count] == 27) {
                 LOG_MSG("DOS CON: %s",log_dev_con_str.c_str());
                 log_dev_con_str.clear();
             }
@@ -793,22 +794,22 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
                 case '[': 
                     ansi.sci=true;
                     break;
-				case '*':/* PC-98: clear screen (same code path as CTRL+Z) */
-				if (IS_PC98_ARCH) {
-					Bit8u page = real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
+                case '*':/* PC-98: clear screen (same code path as CTRL+Z) */
+                    if (IS_PC98_ARCH) {
+                        Bit8u page = real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
+						
+                        /* it also redraws the function key row */
+                        update_pc98_function_row(pc98_function_row_mode,true);
 
-                    /* it also redraws the function key row */
-                    update_pc98_function_row(pc98_function_row_mode,true);
-
-					INT10_ScrollWindow(0,0,255,255,0,ansi.attr,page);
-					Real_INT10_SetCursorPos(0,0,page);
-					ClearAnsi();
-				}
-				else {
-                    LOG(LOG_IOCTL,LOG_NORMAL)("ANSI: unknown char %c after a esc",data[count]); /*prob () */
-                    ClearAnsi();
-                }
-                break;
+                        INT10_ScrollWindow(0,0,255,255,0,ansi.attr,page);
+                        Real_INT10_SetCursorPos(0,0,page);
+                        ClearAnsi();
+                    }
+                    else {
+                        LOG(LOG_IOCTL,LOG_NORMAL)("ANSI: unknown char %c after a esc",data[count]); /*prob () */
+                        ClearAnsi();
+                    }
+					break;
                 case '=':/* cursor position */
 					ansi.equcurp=true;
 					ansi.sci=true;
@@ -819,12 +820,12 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
                 case 'D':/* cursor DOWN (with scrolling) */
 					ESC_D();
 					break;
-				case 'E':/* cursor DOWN, carriage return (with scrolling) */
+                case 'E':/* cursor DOWN, carriage return (with scrolling) */
 					ESC_E();
 					break;
-				case 'M':/* cursor UP (with scrolling) */ 
+                case 'M':/* cursor UP (with scrolling) */ 
 					ESC_M();
-					break;		
+					break;
                 default:
                     LOG(LOG_IOCTL,LOG_NORMAL)("ANSI: unknown char %c after a esc",data[count]); /*prob () */
                     ClearAnsi();
@@ -860,10 +861,10 @@ bool device_CON::Write(Bit8u * data,Bit16u * size) {
                             update_pc98_function_row(data[count] == 'l');
 							ansi.nrows = real_readb(0x60,0x112)+1;
                             break;
-						case 3: // clear screen (doesn't matter if l or h)
-							INT10_ScrollWindow(0,0,255,255,0,ansi.attr,page);
-							Real_INT10_SetCursorPos(0,0,page);
-							break;
+                        case 3: // clear screen (doesn't matter if l or h)
+                            INT10_ScrollWindow(0,0,255,255,0,ansi.attr,page);
+                            Real_INT10_SetCursorPos(0,0,page);
+                            break;
                         case 5: // show/hide cursor
                             void PC98_show_cursor(bool show);
                             PC98_show_cursor(data[count] == 'l');
@@ -1166,7 +1167,7 @@ device_CON::device_CON() {
 	readcache=0;
 	lastwrite=0;
 	ansi.Disable();
-	
+
 	if (IS_PC98_ARCH) {
 		// NTS: On real hardware, the BIOS does NOT manage the console at all.
 		// TTY handling is entirely handled by MS-DOS.

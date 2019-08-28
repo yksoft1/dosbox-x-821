@@ -64,7 +64,12 @@ static void DOS_Mem_E_Exit(const char *msg) {
 		mcb.GetType(),c,mcb_segment+1,mcb.GetSize(),name);
 	LOG_MSG("End dump\n");
 
-	E_Exit(msg);
+#if C_DEBUG
+    LOG_MSG("DOS fatal memory error: %s",msg);
+    throw int(7); // DOS non-fatal error (restart when debugger runs again)
+#else
+	E_Exit("%s",msg);
+#endif
 }
 
 void DOS_CompressMemory(Bit16u first_segment=0/*default*/) {
@@ -97,14 +102,7 @@ void DOS_FreeProcessMemory(Bit16u pspseg) {
 		if (mcb.GetPSPSeg()==pspseg) {
 			mcb.SetPSPSeg(MCB_FREE);
 		}
-		if (mcb.GetType()==0x5a) {
-			/* check if currently last block reaches up to the PCJr graphics memory */
-			if ((machine==MCH_PCJR) && (mcb_segment+mcb.GetSize()==0x17fe) &&
-			   (real_readb(0x17ff,0)==0x4d) && (real_readw(0x17ff,1)==8)) {
-				/* re-enable the memory past segment 0x2000 */
-				mcb.SetType(0x4d);
-			} else break;
-		}
+		if (mcb.GetType()==0x5a) break;
 		if (GCC_UNLIKELY(mcb.GetType()!=0x4d)) DOS_Mem_E_Exit("Corrupt MCB chain");
 		mcb_segment+=mcb.GetSize()+1;
 		mcb.SetPt(mcb_segment);
@@ -414,9 +412,9 @@ void DOS_BuildUMBChain(bool umb_active,bool ems_active) {
 
 	/* UMBs are only possible if the machine has 1MB+64KB of RAM */
 	if (umb_active && (machine!=MCH_TANDY) && seg_limit >= (0x10000+0x1000-1) && first_umb_seg < GetEMSPageFrameSegment()) {
-	    /* XMS emulation sets UMB size now.
+        /* XMS emulation sets UMB size now.
          * PCjr mode disables UMB emulation */
-#if 0		 
+#if 0
 		if (ems_active) {
 			/* we can use UMBs up to the EMS page frame */
 			/* FIXME: when we make the EMS page frame configurable this will need to be updated */
@@ -543,7 +541,6 @@ void DOS_SetupMemory(void) {
 
 	real_writeb(ihseg,ihofs,(Bit8u)0xCF);		//An IRET Instruction
 	RealSetVec(0x01,RealMake(ihseg,ihofs));		//BioMenace (offset!=4)
-		
 	if (machine != MCH_PCJR) RealSetVec(0x02,RealMake(ihseg,ihofs)); //BioMenace (segment<0x8000). Else, taken by BIOS NMI interrupt
 	RealSetVec(0x03,RealMake(ihseg,ihofs));		//Alien Incident (offset!=0)
 	RealSetVec(0x04,RealMake(ihseg,ihofs));		//Shadow President (lower byte of segment!=0)

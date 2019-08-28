@@ -44,8 +44,6 @@ RealPt DOS_DriveDataListHead=0;       // INT 2Fh AX=0803h DRIVER.SYS drive data 
 RealPt DOS_TableUpCase;
 RealPt DOS_TableLowCase;
 
-extern bool mainline_compatible_mapping;
-
 static Bitu call_casemap = 0;
 
 void DOS_Casemap_Free(void) {
@@ -84,20 +82,13 @@ bool DOS_User_Wants_UMBs() {
     Section_prop * section=static_cast<Section_prop *>(control->GetSection("dos"));
     return section->Get_bool("umb");
 }
- 
+
 void DOS_GetMemory_Choose() {
 	if (DOS_PRIVATE_SEGMENT == 0) {
-		if (mainline_compatible_mapping) {
-			/* DOSBox mainline compatible: private area 0xC800-0xCFFF */
-			DOS_PRIVATE_SEGMENT=0xc800;
-			DOS_PRIVATE_SEGMENT_END=0xc800 + DOS_PRIVATE_SEGMENT_Size;
-		}
-		else {
-			/* DOSBox-X non-compatible: Position ourself just past the VGA BIOS */
-			/* NTS: Code has been arranged so that DOS kernel init follows BIOS INT10h init */
-			DOS_PRIVATE_SEGMENT=VGA_BIOS_SEG_END;
-			DOS_PRIVATE_SEGMENT_END=DOS_PRIVATE_SEGMENT + DOS_PRIVATE_SEGMENT_Size;
-		}
+		/* DOSBox-X non-compatible: Position ourself just past the VGA BIOS */
+		/* NTS: Code has been arranged so that DOS kernel init follows BIOS INT10h init */
+		DOS_PRIVATE_SEGMENT=VGA_BIOS_SEG_END;
+		DOS_PRIVATE_SEGMENT_END=DOS_PRIVATE_SEGMENT + DOS_PRIVATE_SEGMENT_Size;
 
         if (IS_PC98_ARCH) {
             /* Do not let the private segment overlap with anything else after segment C800:0000 including the SOUND ROM at CC00:0000 */
@@ -125,7 +116,7 @@ void DOS_GetMemory_Choose() {
             if (DOS_PRIVATE_SEGMENT >= DOS_PRIVATE_SEGMENT_END)
                 E_Exit("Insufficient room in upper memory area for private area");
         }
-
+		 
 		if (DOS_PRIVATE_SEGMENT >= 0xA000) {
 			memset(GetMemBase()+(DOS_PRIVATE_SEGMENT<<4),0x00,(DOS_PRIVATE_SEGMENT_END-DOS_PRIVATE_SEGMENT)<<4);
 			MEM_map_RAM_physmem(DOS_PRIVATE_SEGMENT<<4,(DOS_PRIVATE_SEGMENT_END<<4)-1);
@@ -151,6 +142,7 @@ Bit16u DOS_GetMemory(Bit16u pages,const char *who) {
 	}
 	Bit16u page=dos_memseg;
 	LOG(LOG_DOSMISC,LOG_DEBUG)("DOS_GetMemory(0x%04x pages,\"%s\") = 0x%04x",pages,who,page);
+
 	dos_memseg+=pages;
 	return page;
 }
@@ -205,14 +197,12 @@ PhysPt DOS_Get_DPB(unsigned int dos_drive) {
 
 void DOS_SetupTables(void) {
 	Bit16u seg;Bitu i;
-
+	
 	dos.tables.dpb_size=0x21;  // bytes per DPB entry (MS-DOS 4.x-6.x size)
 	dos.tables.mediaid_offset=0x17; // media ID offset in DPB (MS-DOS 4.x-6.x case)
 
-	dos.tables.mediaid=RealMake(DOS_GetMemory(4,"dos.tables.mediaid"),0);
 	dos.tables.tempdta=RealMake(DOS_GetMemory(4,"dos.tables.tempdta"),0);
 	dos.tables.tempdta_fcbdelete=RealMake(DOS_GetMemory(4,"dos.tables.fcbdelete"),0);
-	for (i=0;i<DOS_DRIVES;i++) mem_writew(Real2Phys(dos.tables.mediaid)+i*2,0);
 	/* Create the DOS Info Block */
 	dos_infoblock.SetLocation(DOS_INFOBLOCK_SEG); //c2woody
    
@@ -241,7 +231,7 @@ void DOS_SetupTables(void) {
 
 
 
-	/* Allocate DCBS DOUBLE BYTE CHARACTER SET LEAD-BYTE TABLE */
+    /* Allocate DCBS DOUBLE BYTE CHARACTER SET LEAD-BYTE TABLE */
 	if (enable_dbcs_tables) {
 		dos.tables.dbcs=RealMake(DOS_GetMemory(12,"dos.tables.dbcs"),0);
 
@@ -328,7 +318,7 @@ void DOS_SetupTables(void) {
         if ((i+1) < DOS_DRIVES)
             real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,RealMake(dos.tables.dpb,(i+1)*dos.tables.dpb_size));
         else
-            real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,0xFFFFFFFF); // ED4.EXE (provided by yksoft1) expects this, or else loops forever);
+            real_writed(dos.tables.dpb,i*dos.tables.dpb_size+0x19,0xFFFFFFFF); // ED4.EXE (provided by yksoft1) expects this, or else loops forever
 	}
 	dos_infoblock.SetFirstDPB(RealMake(dos.tables.dpb,0));
 

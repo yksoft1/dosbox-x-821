@@ -33,41 +33,41 @@
 #include "support.h"
 #include "parport.h"
 #include "serialport.h"
-#ifndef HX_DOS
 #include "dos_network.h"
-#endif
 
 Bitu INT29_HANDLER(void);
 Bit32u BIOS_get_PC98_INT_STUB(void);
-
+	
 int ascii_toupper(int c) {
-	if (c >= 'a' && c <= 'z')
-	return c + 'A' - 'a';
+    if (c >= 'a' && c <= 'z')
+        return c + 'A' - 'a';
 
-	return c;
+    return c;
 }
 
 bool shiftjis_lead_byte(int c) {
-	if ((((unsigned char)c & 0xE0) == 0x80) ||
-		(((unsigned char)c & 0xE0) == 0xE0))
-		return true;
-	return false;
+    if ((((unsigned char)c & 0xE0) == 0x80) ||
+        (((unsigned char)c & 0xE0) == 0xE0))
+        return true;
+
+    return false;
 }
 
 char * shiftjis_upcase(char * str) {
-	for (char* idx = str; *idx ; ) {
-		if (shiftjis_lead_byte(*idx)) {
-		/* Shift-JIS is NOT ASCII and should not be converted to uppercase like ASCII.
-		/* The trailing byte can be mistaken for ASCII */
-			idx++;
-			if (*idx != 0) idx++;
-		}
-		else {
-			*idx = ascii_toupper(*reinterpret_cast<unsigned char*>(idx));
-			idx++;
-		}
-	}
-	return str;
+    for (char* idx = str; *idx ; ) {
+        if (shiftjis_lead_byte(*idx)) {
+            /* Shift-JIS is NOT ASCII and should not be converted to uppercase like ASCII.
+             * The trailing byte can be mistaken for ASCII */
+            idx++;
+            if (*idx != 0) idx++;
+        }
+        else {
+            *idx = ascii_toupper(*reinterpret_cast<unsigned char*>(idx));
+            idx++;
+        }
+    }
+
+    return str;
 }
 
 unsigned char cpm_compat_mode = CPM_COMPAT_MSDOS5;
@@ -138,7 +138,7 @@ Bit16u DOS_INFOBLOCK_SEG=0x80;	// sysvars (list of lists)
 Bit16u DOS_CONDRV_SEG=0xa0;
 Bit16u DOS_CONSTRING_SEG=0xa8;
 Bit16u DOS_SDA_SEG=0xb2;		// dos swappable area
-Bit16u DOS_SDA_SEG_SIZE=0x560; // WordPerfect 5.1 consideration (emendelson)
+Bit16u DOS_SDA_SEG_SIZE=0x560;  // WordPerfect 5.1 consideration (emendelson)
 Bit16u DOS_SDA_OFS=0;
 Bit16u DOS_CDS_SEG=0x108;
 Bit16u DOS_MEM_START=0x158;	 // regression to r3437 fixes nascar 2 colors
@@ -238,39 +238,40 @@ static void DOS_AddDays(Bitu days) {
 }
 
 #define DATA_TRANSFERS_TAKE_CYCLES 1
-#ifdef DATA_TRANSFERS_TAKE_CYCLES
+#define DOS_OVERHEAD 1
 
 #ifndef DOSBOX_CPU_H
 #include "cpu.h"
 #endif
-static inline void modify_cycles(Bits value) {
-	if((4*value+5) < CPU_Cycles) {
-		CPU_Cycles -= 4*value;
-		CPU_IODelayRemoved += 4*value;
-	} else {
-		CPU_IODelayRemoved += CPU_Cycles/*-5*/; //don't want to mess with negative
-		CPU_Cycles = 5;
-	}
+
+// TODO: Make this configurable.
+//       Additionally, allow this to vary per-drive so that
+//       Drive D: can be as slow as a 2X IDE CD-ROM drive in PIO mode
+//       Drive C: can be as slow as a IDE drive in PIO mode and
+//       Drive A: can be as slow as a 3.5" 1.44MB floppy disk
+//
+// This fixes MS-DOS games that crash or malfunction if the disk I/O is too fast.
+// This also fixes "380 volt" and prevents the "city animation" from loading too fast for it's music timing (and getting stuck)
+int disk_data_rate = 2100000;    // 2.1MBytes/sec mid 1990s IDE PIO hard drive without SMARTDRV
+
+void diskio_delay(Bits value/*bytes*/) {
+    if (disk_data_rate != 0) {
+        double scalar = (double)value / disk_data_rate;
+        double endtime = PIC_FullIndex() + (scalar * 1000);
+
+        /* MS-DOS will most likely enable interrupts in the course of
+         * performing disk I/O */
+        CPU_STI();
+
+        do {
+            CALLBACK_Idle();
+        } while (PIC_FullIndex() < endtime);
+    }
 }
-#else
-static inline void modify_cycles(Bits /* value */) {
-	return;
-}
-#endif
-#define DOS_OVERHEAD 1
-#ifdef DOS_OVERHEAD
-#ifndef DOSBOX_CPU_H
-#include "cpu.h"
-#endif
 
 static inline void overhead() {
 	reg_ip += 2;
 }
-#else
-static inline void overhead() {
-	return;
-}
-#endif
 
 #define BCD2BIN(x)	((((x) >> 4) * 10) + ((x) & 0x0f))
 #define BIN2BCD(x)	((((x) / 10) << 4) + (x) % 10)
@@ -405,6 +406,9 @@ void DOS_BreakAction() {
  * --J.C. */
 bool disk_io_unmask_irq0 = true;
 
+//! \brief Is a DOS program running ? (set by INT21 4B/4C)
+bool dos_program_running = false;
+
 void XMS_DOS_LocalA20EnableIfNotEnabled(void);
 
 #define DOSNAMEBUF 256
@@ -457,8 +461,9 @@ static Bitu DOS_21Handler(void) {
 		else {
 			DOS_Terminate(mem_readw(SegPhys(ss)+reg_sp+2),false,0);
 		}
-		
+
 		if (DOS_BreakINT23InProgress) throw int(0); /* HACK: Ick */
+		dos_program_running = false;
 		break;
 	case 0x01:		/* Read character from STDIN, with echo */
 		{	
@@ -581,6 +586,10 @@ static Bitu DOS_21Handler(void) {
 			for(;;) {
 				if (!DOS_BreakTest()) return CBRET_NONE;
 				DOS_ReadFile(STDIN,&c,&n);
+				if (n == 0)				// End of file
+					E_Exit("DOS:0x0a:Redirected input reached EOF");
+				if (c == 10)			// Line feed
+					continue;
 				if (c == 8) {			// Backspace
 					if (read) {	//Something to backspace.
 						// STDOUT treats backspace as non-destructive.
@@ -769,8 +778,8 @@ static Bitu DOS_21Handler(void) {
 		{
 			if(date_host_forced || IS_PC98_ARCH) {
 				// use BIOS to get system date
-				if (IS_PC98_ARCH) {
-				    CPU_Push16(reg_ax);
+                if (IS_PC98_ARCH) {
+                    CPU_Push16(reg_ax);
                     CPU_Push16(reg_bx);
                     CPU_Push16(SegValue(es));
                     reg_sp -= 6;
@@ -792,25 +801,25 @@ static Bitu DOS_21Handler(void) {
                     reg_dh = BCD2BIN(mem_readb(memaddr+1) >> 4);
                     reg_dl = BCD2BIN(mem_readb(memaddr+2));
                     reg_al = BCD2BIN(mem_readb(memaddr+1) & 0xF);
-				}
-				else {
-					CPU_Push16(reg_ax);
-					reg_ah = 4;		// get RTC date
-					CALLBACK_RunRealInt(0x1a);
-					reg_ax = CPU_Pop16();
+                }
+                else {
+                    CPU_Push16(reg_ax);
+                    reg_ah = 4;		// get RTC date
+                    CALLBACK_RunRealInt(0x1a);
+                    reg_ax = CPU_Pop16();
 
-					reg_ch = BCD2BIN(reg_ch);		// century
-					reg_cl = BCD2BIN(reg_cl);		// year
-					reg_cx = reg_ch * 100 + reg_cl;	// compose century + year
-					reg_dh = BCD2BIN(reg_dh);		// month
-					reg_dl = BCD2BIN(reg_dl);		// day
+                    reg_ch = BCD2BIN(reg_ch);		// century
+                    reg_cl = BCD2BIN(reg_cl);		// year
+                    reg_cx = reg_ch * 100 + reg_cl;	// compose century + year
+                    reg_dh = BCD2BIN(reg_dh);		// month
+                    reg_dl = BCD2BIN(reg_dl);		// day
 
-					// calculate day of week (we could of course read it from CMOS, but never mind)
-					int a = (14 - reg_dh) / 12;
-					int y = reg_cl - a;
-					int m = reg_dh + 12 * a - 2;
-					reg_al = (reg_dl + y + (y / 4) - (y / 100) + (y / 400) + (31 * m) / 12) % 7;
-				}
+                    // calculate day of week (we could of course read it from CMOS, but never mind)
+                    int a = (14 - reg_dh) / 12;
+                    int y = reg_cl - a;
+                    int m = reg_dh + 12 * a - 2;
+                    reg_al = (reg_dl + y + (y / 4) - (y / 100) + (y / 400) + (31 * m) / 12) % 7;
+                }
 			} else {
 				reg_ax=0; // get time
 				CALLBACK_RunRealInt(0x1a);
@@ -878,8 +887,8 @@ static Bitu DOS_21Handler(void) {
 	case 0x2c: {	/* Get System Time */
 		if(date_host_forced || IS_PC98_ARCH) {
 			// use BIOS to get RTC time
-			if (IS_PC98_ARCH) {
-				CPU_Push16(reg_ax);
+            if (IS_PC98_ARCH) {
+                CPU_Push16(reg_ax);
                 CPU_Push16(reg_bx);
                 CPU_Push16(SegValue(es));
                 reg_sp -= 6;
@@ -901,23 +910,23 @@ static Bitu DOS_21Handler(void) {
                 reg_dh = BCD2BIN(mem_readb(memaddr+5));		// seconds
 
                 reg_dl = 0;
-			}
-			else {
-				CPU_Push16(reg_ax);
-			
-				reg_ah = 2;		// get RTC time
-				CALLBACK_RunRealInt(0x1a);
-			
-				reg_ax = CPU_Pop16();
+            }
+            else {
+                CPU_Push16(reg_ax);
 
-				reg_ch = BCD2BIN(reg_ch);		// hours
-				reg_cl = BCD2BIN(reg_cl);		// minutes
-				reg_dh = BCD2BIN(reg_dh);		// seconds
+                reg_ah = 2;		// get RTC time
+                CALLBACK_RunRealInt(0x1a);
 
-				// calculate milliseconds (% 20 to prevent overflow, .55ms has period of 20)
-				// direcly read BIOS_TIMER, don't want to destroy regs by calling int 1a
-				reg_dl = (Bit8u)((mem_readd(BIOS_TIMER) % 20) * 55 % 100);
-			}
+                reg_ax = CPU_Pop16();
+
+                reg_ch = BCD2BIN(reg_ch);		// hours
+                reg_cl = BCD2BIN(reg_cl);		// minutes
+                reg_dh = BCD2BIN(reg_dh);		// seconds
+
+                // calculate milliseconds (% 20 to prevent overflow, .55ms has period of 20)
+                // direcly read BIOS_TIMER, don't want to destroy regs by calling int 1a
+                reg_dl = (Bit8u)((mem_readd(BIOS_TIMER) % 20) * 55 % 100);
+            }
 			break;
 		}
 		reg_ax=0; // get time
@@ -1014,6 +1023,7 @@ static Bitu DOS_21Handler(void) {
 		DOS_ResizeMemory(dos.psp(),&reg_dx);
 		DOS_Terminate(dos.psp(),true,reg_al);
 		if (DOS_BreakINT23InProgress) throw int(0); /* HACK: Ick */
+		dos_program_running = false;
 		break;
 	case 0x1f: /* Get drive parameter block for default drive */
 	case 0x32: /* Get drive parameter block for specific drive */
@@ -1021,7 +1031,7 @@ static Bitu DOS_21Handler(void) {
 			Bit8u drive=reg_dl;
 			if (!drive || reg_ah==0x1f) drive = DOS_GetDefaultDrive();
 			else drive--;
-			if (Drives[drive]) {
+			if (drive < DOS_DRIVES && Drives[drive] && !Drives[drive]->isRemovable()) {
 				reg_al = 0x00;
 				SegSet16(ds,dos.tables.dpb);
 				reg_bx = drive*dos.tables.dpb_size;
@@ -1152,6 +1162,7 @@ static Bitu DOS_21Handler(void) {
 			reg_ax=dos.errorcode;
 			CALLBACK_SCF(true);
 		}
+        diskio_delay(2048);
 		break;
 	case 0x3d:		/* OPEN Open existing file */
         unmask_irq0 |= disk_io_unmask_irq0;
@@ -1162,6 +1173,7 @@ static Bitu DOS_21Handler(void) {
 			reg_ax=dos.errorcode;
 			CALLBACK_SCF(true);
 		}
+        diskio_delay(1024);
 		break;
 	case 0x3e:		/* CLOSE Close file */
         unmask_irq0 |= disk_io_unmask_irq0;
@@ -1172,31 +1184,32 @@ static Bitu DOS_21Handler(void) {
 			reg_ax=dos.errorcode;
 			CALLBACK_SCF(true);
 		}
-		break;
+        diskio_delay(512);
+        break;
 	case 0x3f:		/* READ Read from file or device */
         unmask_irq0 |= disk_io_unmask_irq0;
 		/* TODO: If handle is STDIN and not binary do CTRL+C checking */
 		{ 
 			Bit16u toread=reg_cx;
-			
-			/* if the offset and size exceed the end of the 64KB segment,
-			 * truncate the read according to observed MS-DOS 5.0 behavior
-			 * where the actual byte count read is 64KB minus (reg_dx % 16).
-			 *
-			 * This is needed for "Dark Purpose" to read it's DAT file
-			 * correctly, which calls INT 21h AH=3Fh with DX=0004h and CX=FFFFh
-			 * and will mis-render it's fonts, images, and color palettes
-			 * if we do not do this.
-			 *
-			 * Ref: http://files.scene.org/get/mirrors/hornet/demos/1995/d/darkp.zip */
-			if (((uint32_t)toread+(uint32_t)reg_dx) > 0xFFFFUL  && (reg_dx & 0xFU) != 0U) {
-				Bit16u nuread = (Bit16u)(0x10000UL - (reg_dx & 0xF)); /* FIXME: If MS-DOS 5.0 truncates it any farther I need to know! */
 
-				if (nuread > toread) nuread = toread;
-				LOG_MSG("INT 21h READ warning: DX=%04xh CX=%04xh exceeds 64KB, truncating to %04xh",reg_dx,toread,nuread);
-				toread = nuread;
-			}
-			
+            /* if the offset and size exceed the end of the 64KB segment,
+             * truncate the read according to observed MS-DOS 5.0 behavior
+             * where the actual byte count read is 64KB minus (reg_dx % 16).
+             *
+             * This is needed for "Dark Purpose" to read it's DAT file
+             * correctly, which calls INT 21h AH=3Fh with DX=0004h and CX=FFFFh
+             * and will mis-render it's fonts, images, and color palettes
+             * if we do not do this.
+             *
+             * Ref: http://files.scene.org/get/mirrors/hornet/demos/1995/d/darkp.zip */
+            if (((uint32_t)toread+(uint32_t)reg_dx) > 0xFFFFUL && (reg_dx & 0xFU) != 0U) {
+                Bit16u nuread = (Bit16u)(0x10000UL - (reg_dx & 0xF)); /* FIXME: If MS-DOS 5.0 truncates it any farther I need to know! */
+
+                if (nuread > toread) nuread = toread;
+                LOG_MSG("INT 21h READ warning: DX=%04xh CX=%04xh exceeds 64KB, truncating to %04xh",reg_dx,toread,nuread);
+                toread = nuread;
+            }
+
 			dos.echo=true;
 			if (DOS_ReadFile(reg_bx,dos_copybuf,&toread)) {
 				MEM_BlockWrite(SegPhys(ds)+reg_dx,dos_copybuf,toread);
@@ -1206,7 +1219,7 @@ static Bitu DOS_21Handler(void) {
 				reg_ax=dos.errorcode;
 				CALLBACK_SCF(true);
 			}
-			modify_cycles(reg_ax);
+			diskio_delay(reg_ax);
 			dos.echo=false;
 			break;
 		}
@@ -1215,20 +1228,20 @@ static Bitu DOS_21Handler(void) {
 		{
 			Bit16u towrite=reg_cx;
 
-			/* if the offset and size exceed the end of the 64KB segment,
-		  	 * truncate the write according to observed MS-DOS 5.0 READ behavior
-			 * where the actual byte count written is 64KB minus (reg_dx % 16).
-			 *
-			 * This is copy-paste of AH=3Fh read handling because it's likely
-			 * that MS-DOS probably does the same with write as well, though
-			 * this has not yet been confirmed. --J.C. */
-			if (((uint32_t)towrite+(uint32_t)reg_dx) > 0xFFFFUL && (reg_dx & 0xFU) != 0U) {
-				Bit16u nuwrite = (Bit16u)(0x10000UL - (reg_dx & 0xF)); /* FIXME: If MS-DOS 5.0 truncates it any farther I need to know! */
+            /* if the offset and size exceed the end of the 64KB segment,
+             * truncate the write according to observed MS-DOS 5.0 READ behavior
+             * where the actual byte count written is 64KB minus (reg_dx % 16).
+             *
+             * This is copy-paste of AH=3Fh read handling because it's likely
+             * that MS-DOS probably does the same with write as well, though
+             * this has not yet been confirmed. --J.C. */
+            if (((uint32_t)towrite+(uint32_t)reg_dx) > 0xFFFFUL && (reg_dx & 0xFU) != 0U) {
+                Bit16u nuwrite = (Bit16u)(0x10000UL - (reg_dx & 0xF)); /* FIXME: If MS-DOS 5.0 truncates it any farther I need to know! */
 
-				if (nuwrite > towrite) nuwrite = towrite;
-				LOG_MSG("INT 21h WRITE warning: DX=%04xh CX=%04xh exceeds 64KB, truncating to %04xh",reg_dx,towrite,nuwrite);
-				towrite = nuwrite;
-			}
+                if (nuwrite > towrite) nuwrite = towrite;
+                LOG_MSG("INT 21h WRITE warning: DX=%04xh CX=%04xh exceeds 64KB, truncating to %04xh",reg_dx,towrite,nuwrite);
+                towrite = nuwrite;
+            }
 
 			MEM_BlockRead(SegPhys(ds)+reg_dx,dos_copybuf,towrite);
 			if (DOS_WriteFile(reg_bx,dos_copybuf,&towrite)) {
@@ -1238,7 +1251,7 @@ static Bitu DOS_21Handler(void) {
 				reg_ax=dos.errorcode;
 				CALLBACK_SCF(true);
 			}
-			modify_cycles(reg_ax);
+			diskio_delay(reg_ax);
 			break;
 		};
 	case 0x41:					/* UNLINK Delete file */
@@ -1250,6 +1263,7 @@ static Bitu DOS_21Handler(void) {
 			reg_ax=dos.errorcode;
 			CALLBACK_SCF(true);
 		}
+        diskio_delay(1024);
 		break;
 	case 0x42:					/* LSEEK Set current file position */
         unmask_irq0 |= disk_io_unmask_irq0;
@@ -1263,7 +1277,8 @@ static Bitu DOS_21Handler(void) {
 				reg_ax=dos.errorcode;
 				CALLBACK_SCF(true);
 			}
-			break;
+            diskio_delay(32);
+            break;
 		}
 	case 0x43:					/* Get/Set file attributes */
         unmask_irq0 |= disk_io_unmask_irq0;
@@ -1376,12 +1391,14 @@ static Bitu DOS_21Handler(void) {
 				reg_ax=dos.errorcode;
 				CALLBACK_SCF(true);
 			}
+			dos_program_running = true;
 		}
 		break;
 //TODO Check for use of execution state AL=5
 	case 0x4c:					/* EXIT Terminate with return code */
 		DOS_Terminate(dos.psp(),false,reg_al);
 		if (DOS_BreakINT23InProgress) throw int(0); /* HACK: Ick */
+		dos_program_running = false;
 		break;
 	case 0x4d:					/* Get Return code */
 		reg_al=dos.return_code;/* Officially read from SDA and clear when read */
@@ -1414,6 +1431,9 @@ static Bitu DOS_21Handler(void) {
 		reg_bx=dos.psp();
 		break;
 	case 0x52: {				/* Get list of lists */
+		Bit8u count=2; // floppy drives always counted
+		while (count<DOS_DRIVES && Drives[count] && !Drives[count]->isRemovable()) count++;
+		dos_infoblock.SetBlockDevices(count);
 		RealPt addr=dos_infoblock.GetPointer();
 		SegSet16(es,RealSeg(addr));
 		reg_bx=RealOff(addr);
@@ -1553,19 +1573,18 @@ static Bitu DOS_21Handler(void) {
 		*/
 	case 0x5d:					/* Network Functions */
 		if(reg_al == 0x06) {
-			/* FIXME: I'm still not certain, @emendelson, why this matters so much
-			* to WordPerfect 5.1 and 6.2 and why it causes problems otherwise.
-			* DOSBox and DOSBox-X only use the first 0x1A bytes anyway. */
+            /* FIXME: I'm still not certain, @emendelson, why this matters so much
+             *        to WordPerfect 5.1 and 6.2 and why it causes problems otherwise.
+             *        DOSBox and DOSBox-X only use the first 0x1A bytes anyway. */
 			SegSet16(ds,DOS_SDA_SEG);
 			reg_si = DOS_SDA_OFS;
-			reg_cx = DOS_SDA_SEG_SIZE; // swap if in dos
-			reg_dx = 0x1a; // swap always (NTS: Size of DOS SDA structure in dos_inc)
+			reg_cx = DOS_SDA_SEG_SIZE;  // swap if in dos
+			reg_dx = 0x1a;  // swap always (NTS: Size of DOS SDA structure in dos_inc)
 			LOG(LOG_DOSMISC,LOG_ERROR)("Get SDA, Let's hope for the best!");
 		}
 		break;
 	case 0x5f:					/* Network redirection */
-#if defined(WIN32)
-#ifndef HX_DOS
+#if defined(WIN32) && !defined(HX_DOS)
 		switch(reg_al)
 		{
 		case	0x34:	//Set pipe state
@@ -1607,10 +1626,6 @@ static Bitu DOS_21Handler(void) {
 			CALLBACK_SCF(true);
 			break;
 		}
-#else
-		reg_ax=0x0001;			//Failing it
-		CALLBACK_SCF(true);	
-#endif
 #else
 		reg_ax=0x0001;			//Failing it
 		CALLBACK_SCF(true);
@@ -1852,7 +1867,7 @@ static Bitu DOS_27Handler(void) {
 }
 
 static Bitu DOS_25Handler(void) {
-	if (Drives[reg_al] == 0){
+	if (reg_al >= DOS_DRIVES || !Drives[reg_al] || Drives[reg_al]->isRemovable()) {
         reg_ax = 0x8002;
         SETFLAGBIT(CF,true);
     } else {
@@ -1951,7 +1966,7 @@ static Bitu DOS_25Handler(void) {
     return CBRET_NONE;
 }
 static Bitu DOS_26Handler(void) {
-	if (Drives[reg_al] == 0){
+	if (reg_al >= DOS_DRIVES || !Drives[reg_al] || Drives[reg_al]->isRemovable()) {	
 		reg_ax = 0x8002;
 		SETFLAGBIT(CF,true);
     } else {
@@ -2041,7 +2056,6 @@ static Bitu DOS_26Handler(void) {
     return CBRET_NONE;
 }
 
-extern bool mainline_compatible_mapping;
 bool enable_collating_uppercase = true;
 bool keep_private_area_on_boot = false;
 bool dynamic_dos_kernel_alloc = false;
@@ -2109,6 +2123,7 @@ Bitu MEM_PageMask(void);
 
 extern bool dos_con_use_int16_to_detect_input;
 extern bool dbg_zero_on_dos_allocmem;
+extern bool log_dev_con;
 
 class DOS:public Module_base{
 private:
@@ -2142,13 +2157,23 @@ public:
 	DOS(Section* configuration):Module_base(configuration){
 		Section_prop * section=static_cast<Section_prop *>(configuration);
 
-		dos_in_hma = section->Get_bool("dos in hma");
-		dos_sda_size = section->Get_int("dos sda size");
+        ::disk_data_rate = section->Get_int("hard drive data rate limit");
+        if (::disk_data_rate < 0) {
+            extern bool pcibus_enable;
+
+            if (pcibus_enable)
+                ::disk_data_rate = 8333333; /* Probably an average IDE data rate for mid 1990s PCI IDE controllers in PIO mode */
+            else
+                ::disk_data_rate = 3500000; /* Probably an average IDE data rate for early 1990s ISA IDE controllers in PIO mode */
+        }
+
+        dos_in_hma = section->Get_bool("dos in hma");
+        dos_sda_size = section->Get_int("dos sda size");
 		enable_dbcs_tables = section->Get_bool("dbcs");
 		enable_share_exe_fake = section->Get_bool("share");
 		enable_filenamechar = section->Get_bool("filenamechar");
 		dos_initial_hma_free = section->Get_int("hma free space");
-		minimum_mcb_free = section->Get_hex("minimum mcb free");
+        minimum_mcb_free = section->Get_hex("minimum mcb free");
 		minimum_mcb_segment = section->Get_hex("minimum mcb segment");
 		private_segment_in_umb = section->Get_bool("private area in umb");
 		enable_collating_uppercase = section->Get_bool("collating and uppercase");
@@ -2184,18 +2209,18 @@ public:
         else
             cpm_compat_mode = CPM_COMPAT_OFF;
 
-		/* FIXME: Boot up an MS-DOS system and look at what INT 21h on Microsoft's MS-DOS returns
-		 * for SDA size and location, then use that here.
-		 *
-		 * Why does this value matter so much to WordPerfect 5.1? */
-		if (dos_sda_size == 0)
-			DOS_SDA_SEG_SIZE = 0x560;
-		else if (dos_sda_size < 0x1A)
-			DOS_SDA_SEG_SIZE = 0x1A;
-		else if (dos_sda_size > 32768)
-			DOS_SDA_SEG_SIZE = 32768;
-		else
-			DOS_SDA_SEG_SIZE = (dos_sda_size + 0xF) & (~0xF); /* round up to paragraph */
+        /* FIXME: Boot up an MS-DOS system and look at what INT 21h on Microsoft's MS-DOS returns
+         *        for SDA size and location, then use that here.
+         *
+         *        Why does this value matter so much to WordPerfect 5.1? */
+        if (dos_sda_size == 0)
+            DOS_SDA_SEG_SIZE = 0x560;
+        else if (dos_sda_size < 0x1A)
+            DOS_SDA_SEG_SIZE = 0x1A;
+        else if (dos_sda_size > 32768)
+            DOS_SDA_SEG_SIZE = 32768;
+        else
+            DOS_SDA_SEG_SIZE = (dos_sda_size + 0xF) & (~0xF); /* round up to paragraph */
 
         /* msdos 2.x and msdos 5.x modes, if HMA is involved, require us to take the first 256 bytes of HMA
          * in order for "F01D:FEF0" to work properly whether or not A20 is enabled. Our direct mode doesn't
@@ -2210,8 +2235,8 @@ public:
             }
         }
 
-		if ((int)MAXENV < 0) MAXENV = mainline_compatible_mapping ? 32768 : 65535;
-		if ((int)ENV_KEEPFREE < 0) ENV_KEEPFREE = mainline_compatible_mapping ? 83 : 1024;
+		if ((int)MAXENV < 0) MAXENV = 65535;
+		if ((int)ENV_KEEPFREE < 0) ENV_KEEPFREE = 1024;
 
 		LOG(LOG_MISC,LOG_DEBUG)("DOS: MAXENV=%u ENV_KEEPFREE=%u",MAXENV,ENV_KEEPFREE);
 
@@ -2222,24 +2247,16 @@ public:
 			LOG_MSG("Debug option enabled: INT 21h memory allocation will always clear memory block before returning\n");
 		}
 
-		if (!dynamic_dos_kernel_alloc || mainline_compatible_mapping) {
+		if (!dynamic_dos_kernel_alloc) {
 			LOG_MSG("kernel allocation in umb option incompatible with other settings, disabling.\n");
 			private_always_from_umb = false;
 		}
-
 
 		if (minimum_mcb_segment > 0x8000) minimum_mcb_segment = 0x8000; /* FIXME: Clip against available memory */
 
 		if (dynamic_dos_kernel_alloc) {
 			/* we make use of the DOS_GetMemory() function for the dynamic allocation */
-			if (mainline_compatible_mapping) {
-				DOS_IHSEG = 0x70;
-				DOS_PRIVATE_SEGMENT = 0x80;
-
-                if (IS_PC98_ARCH)
-                    LOG_MSG("WARNING: mainline compatible mapping is not recommended for PC-98 emulation");
-			}
-			else if (private_always_from_umb) {
+			if (private_always_from_umb) {
 				DOS_GetMemory_Choose(); /* the pool starts in UMB */
 				if (minimum_mcb_segment == 0)
 					DOS_MEM_START = IS_PC98_ARCH ? 0x80 : 0x70; /* funny behavior in some games suggests the MS-DOS kernel loads a bit higher on PC-98 */
@@ -2279,7 +2296,7 @@ public:
 			LOG(LOG_MISC,LOG_DEBUG)("Dynamic DOS kernel mode, structures will be allocated from pool 0x%04x-0x%04x",
 				DOS_PRIVATE_SEGMENT,DOS_PRIVATE_SEGMENT_END-1);
 
-			if (!mainline_compatible_mapping) DOS_IHSEG = DOS_GetMemory(1,"DOS_IHSEG");
+			DOS_IHSEG = DOS_GetMemory(1,"DOS_IHSEG");
 
             /* DOS_INFOBLOCK_SEG contains the entire List of Lists, though the INT 21h call returns seg:offset with offset nonzero */
 			DOS_INFOBLOCK_SEG = DOS_GetMemory(0xC0,"DOS_INFOBLOCK_SEG");	// was 0x80
@@ -2298,7 +2315,7 @@ public:
 			DOS_CONDRV_SEG = 0xa0;
 			DOS_CONSTRING_SEG = 0xa8;
 			DOS_SDA_SEG = 0xb2;		// dos swappable area
-			DOS_SDA_SEG_SIZE = 0x560;
+            DOS_SDA_SEG_SIZE = 0x560;
 			DOS_SDA_OFS = 0;
 			DOS_CDS_SEG = 0x108;
 
@@ -2328,7 +2345,7 @@ public:
 		LOG(LOG_MISC,LOG_DEBUG)("   infoblock:    seg 0x%04x",DOS_INFOBLOCK_SEG);
 		LOG(LOG_MISC,LOG_DEBUG)("   condrv:       seg 0x%04x",DOS_CONDRV_SEG);
 		LOG(LOG_MISC,LOG_DEBUG)("   constring:    seg 0x%04x",DOS_CONSTRING_SEG);
-		LOG(LOG_MISC,LOG_DEBUG)("   SDA: seg 0x%04x:0x%04x %u bytes",DOS_SDA_SEG,DOS_SDA_OFS,DOS_SDA_SEG_SIZE);
+		LOG(LOG_MISC,LOG_DEBUG)("   SDA:          seg 0x%04x:0x%04x %u bytes",DOS_SDA_SEG,DOS_SDA_OFS,DOS_SDA_SEG_SIZE);
 		LOG(LOG_MISC,LOG_DEBUG)("   CDS:          seg 0x%04x",DOS_CDS_SEG);
 		LOG(LOG_MISC,LOG_DEBUG)("[private segment @ this point 0x%04x-0x%04x mem=0x%04lx]",
 			DOS_PRIVATE_SEGMENT,DOS_PRIVATE_SEGMENT_END,
@@ -2418,11 +2435,11 @@ public:
 
 			//Fix just for RPG Maker II MUSIC.COM for now...
 			Bit32u vec = RealGetVec(0x48);
-
+			
 			if (vec == BIOS_get_PC98_INT_STUB())
 				mem_writed(0x48*4,vecp);
 		}
-		
+
         /* NTS: HMA support requires XMS. EMS support may switch on A20 if VCPI emulation requires the odd megabyte */
         if ((!dos_in_hma || !section->Get_bool("xms")) && (MEM_A20_Enabled() || strcmp(section->Get_string("ems"),"false") != 0) &&
             cpm_compat_mode != CPM_COMPAT_OFF && cpm_compat_mode != CPM_COMPAT_DIRECT) {
@@ -2481,7 +2498,7 @@ public:
 
 		/* carry on setup */
 		DOS_SetupMemory();								/* Setup first MCB */
-		
+
         /* NTS: The reason PC-98 has a higher minimum free is that the MS-DOS kernel
          *      has a larger footprint in memory, including fixed locations that
          *      some PC-98 games will read directly, and an ANSI driver.
@@ -2500,12 +2517,12 @@ public:
          *        386 enhanced to start, else it will complain about insufficient memory (?).
          *        To get Windows 3.1 to run, either set "minimum mcb free=e10" or run
          *        "LOADFIX" before starting Windows 3.1 */
-
-        /* NTS: There is a mysterious memory corruption issue with some DOS games
-         *      and applications when they are loaded at or around segment 0x800.
-         *      This should be looked into. In the meantime, setting the MCB
-         *      start segment before or after 0x800 helps to resolve these issues.
-         *      It also puts DOSBox-X at parity with main DOSBox SVN behavior. */
+		 
+		/* NTS: There is a mysterious memory corruption issue with some DOS games
+		 * and applications when they are loaded at or around segment 0x800.
+		 * This should be looked into. In the meantime, setting the MCB
+		 * start segment before or after 0x800 helps to resolve these issues.
+		 * It also puts DOSBox-X at parity with main DOSBox SVN behavior. */
         if (minimum_mcb_free == 0)
             minimum_mcb_free = IS_PC98_ARCH ? 0x800 : 0x100;
         else if (minimum_mcb_free < minimum_mcb_segment)
@@ -2580,7 +2597,7 @@ public:
 		if (IS_PC98_ARCH) {
 			void PC98_InitDefFuncRow(void);
 			PC98_InitDefFuncRow();
-
+			
 			real_writeb(0x60,0x113,0x01); /* 25-line mode */
 		}
 	}
@@ -2636,8 +2653,8 @@ void DOS_DoShutDown() {
 		delete test;
 		test = NULL;
 	}
-	
-	if (IS_PC98_ARCH) update_pc98_function_row(0);
+
+    if (IS_PC98_ARCH) update_pc98_function_row(0);
 
     DOS_UnsetupMemory();
     DOS_Casemap_Free();

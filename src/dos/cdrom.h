@@ -34,10 +34,6 @@
 #include "SDL.h"
 #include "SDL_thread.h"
 
-#if defined(C_SDL_SOUND) && !defined(C_SDL2)
-#include "SDL_sound.h"
-#endif
-
 #if defined(C_SDL2) /* SDL 1.x defines this, SDL 2.x does not */
 /** @name Frames / MSF Conversion Functions
  *  Conversion functions from frames to Minute/Second/Frames and vice versa
@@ -178,21 +174,6 @@ private:
 		BinaryFile();
 		std::ifstream *file;
 	};
-	
-#if defined(C_SDL_SOUND) && !defined(C_SDL2)
-	class AudioFile : public TrackFile {
-	public:
-		AudioFile(const char *filename, bool &error);
-		~AudioFile();
-		bool read(Bit8u *buffer, int seek, int count);
-		int getLength();
-	private:
-		AudioFile();
-		Sound_Sample *sample;
-		int lastCount;
-		int lastSeek;	
-	};
-#endif
 
 	struct Track {
 		int number;
