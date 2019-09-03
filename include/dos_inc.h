@@ -357,6 +357,8 @@ public:
 	void SetPt(Bit16u seg) { pt=PhysMake(seg,0);}
 	void SetPt(Bit16u seg,Bit16u off) { pt=PhysMake(seg,off);}
 	void SetPt(RealPt addr) { pt=Real2Phys(addr);}
+    PhysPt GetPtPhys(void) const { return pt; }
+	void SetPtPhys(const PhysPt _pt) { pt=_pt; }
 protected:
 	PhysPt pt;
 };
@@ -551,6 +553,7 @@ public:
 	void	SetDirIDCluster(Bit16u entry)	{ sSave(sDTA,dirCluster,entry); };
 	Bit16u	GetDirID(void)				{ return (Bit16u)sGet(sDTA,dirID); };
 	Bit16u	GetDirIDCluster(void)		{ return (Bit16u)sGet(sDTA,dirCluster); };
+	Bit8u   GetAttr(void)               { return (Bit8u)sGet(sDTA,sattr); }
 private:
 	#ifdef _MSC_VER
 	#pragma pack(1)
