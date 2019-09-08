@@ -37,6 +37,7 @@ MixerChannel *pc98_mixer = NULL;
 NP2CFG pccore;
 
 extern unsigned char pc98_mem_msw_m[8];
+bool pc98_soundbios_rom_load = true;
 bool pc98_soundbios_enabled = false;
 
 extern "C" unsigned char *CGetMemBase() {
@@ -334,7 +335,27 @@ static Bitu SOUNDROM_INTD2_PC98_Handler(void) {
 
     return CBRET_NONE;
 }
- 
+
+bool LoadSoundBIOS(void) {
+	FILE *fp;
+
+	if (!pc98_soundbios_rom_load) return false;
+
+	fp = fopen("SOUND.ROM","rb");
+	if (!fp) fp = fopen("sound.rom","rb");
+	if (!fp) return false;
+
+	if (fread(MemBase+0xCC000,0x4000,1,fp) != 1) {
+		LOG_MSG("PC-98 SOUND.ROM failed to read 16k");
+		fclose(fp);
+		return false;
+	}
+
+	LOG_MSG("PC-98 SOUND.ROM loaded into memory");
+	fclose(fp);
+	return true;
+}
+
 bool PC98_FM_SoundBios_Enabled(void) {
      return pc98_soundbios_enabled;
 }
@@ -363,12 +384,14 @@ void PC98_FM_OnEnterPC98(Section *sec) {
 		baseio = section->Get_hex("pc-98 fm board io port");
 	
 		pc98_soundbios_enabled = section->Get_bool("pc-98 sound bios");
+		pc98_soundbios_rom_load = section->Get_bool("pc-98 load sound bios rom file");
+		pc98_soundbios_enabled = section->Get_bool("pc-98 sound bios");
 		pc98_set_msw4_soundbios();
         if (pc98_soundbios_enabled) {
             /* TODO: Load SOUND.ROM to CC000h - CFFFFh when Sound BIOS is enabled? 
              * Or simulate Sound BIOS calls ourselves? */
-            if (false/*TODO: Loaded SOUND.ROM*/) {
-                /* TODO */
+            if (LoadSoundBIOS()) {
+	                /* good! */
             }
             else {
                 soundbios_callback.Install(&SOUNDROM_INTD2_PC98_Handler,CB_IRET,"Sound ROM INT D2h");
