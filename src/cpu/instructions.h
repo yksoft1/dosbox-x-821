@@ -260,7 +260,7 @@ extern bool enable_fpu;
 	SETFLAGBIT(OF,(lf_resd & 1) ^ (lf_resd >> 31));
 
 
-#define RORB(op1,op2,load,save)						\										\
+#define RORB(op1,op2,load,save)						\
 	FillFlagsNoCFOF();								\
 	lf_var1b=load(op1);								\
 	lf_var2b=op2&0x07;								\
