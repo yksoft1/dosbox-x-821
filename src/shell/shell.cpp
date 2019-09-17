@@ -31,6 +31,8 @@
 
 Bitu shell_psp = 0;
 
+Bitu call_int2e = 0;
+
 void CALLBACK_DeAllocate(Bitu in);
 
 Bitu call_shellstop = 0;
@@ -967,7 +969,9 @@ void SHELL_Init() {
 	real_writed(0,0x23*4,((Bit32u)psp_seg<<16));
 	
 	/* Set up int 2e handler */
-	Bitu call_int2e=CALLBACK_Allocate();
+	if (call_int2e == 0)
+		call_int2e = CALLBACK_Allocate();
+
 	RealPt addr_int2e=RealMake(psp_seg+16+1,8);
 	CALLBACK_Setup(call_int2e,&INT2E_Handler,CB_IRET_STI,Real2Phys(addr_int2e),"Shell Int 2e");
 	RealSetVec(0x2e,addr_int2e);
