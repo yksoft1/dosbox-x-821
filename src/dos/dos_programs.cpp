@@ -682,6 +682,7 @@ public:
 	void Run(void) {
 		std::string bios;
 		bool pc98_640x200 = true;
+		bool pc98_show_graphics = false;
 		bool bios_boot = false;
 		bool swaponedrive = false;
 		bool force = false;
@@ -704,6 +705,8 @@ public:
 			pc98_640x200 = true;
 		if (cmd->FindExist("-pc98-640x400",true))
 			pc98_640x200 = false;
+		if (cmd->FindExist("-pc98-graphics",true))
+			pc98_show_graphics = true;
 
 		/* In secure mode don't allow people to boot stuff. 
 		 * They might try to corrupt the data on it */
@@ -1261,6 +1264,24 @@ public:
 				if (pc98_640x200) {
 					reg_eax = 0x4200; // setup 640x200 graphics
 					reg_ecx = 0x8000; // lower
+					CALLBACK_RunRealInt(0x18);
+				}
+                else {
+					reg_eax = 0x4200;   // setup 640x400 graphics
+					reg_ecx = 0xC000;   // full
+					CALLBACK_RunRealInt(0x18);
+				}
+
+				/* Some HDI images of Orange House games need this option because it assumes NEC MOUSE.COM
+				 * behavior where mouse driver init and reset show the graphics layer. Unfortunately the HDI
+				 * image uses QMOUSE which does not show the graphics layer. Use this option with those
+				 * HDI images to make them playable anyway. */
+				if (pc98_show_graphics) {
+					reg_eax = 0x4000;   // show graphics
+					CALLBACK_RunRealInt(0x18);
+				}
+				else {
+					reg_eax = 0x4100;   // hide graphics (normal state of graphics layer on startup). INT 33h emulation might have enabled it.
 					CALLBACK_RunRealInt(0x18);
 				}
 
