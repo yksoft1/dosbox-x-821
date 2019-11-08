@@ -903,6 +903,10 @@ void MIXER_Controls_Init() {
 	MAPPER_AddHandler(MAPPER_VolumeDown,MK_kpminus,MMOD1,"voldown","VolDown");
 }
 
+void MIXER_DOS_Boot(Section *) {
+	PROGRAMS_MakeFile("MIXER.COM",MIXER_ProgramStart);
+}
+
 void MIXER_Init() {
 	AddExitFunction(AddExitFunctionFuncPair(MIXER_Stop));
 
@@ -982,7 +986,7 @@ void MIXER_Init() {
 		(unsigned int)mixer.samples_per_ms.fn,
 		(unsigned int)mixer.samples_per_ms.fd);
 
-	PROGRAMS_MakeFile("MIXER.COM",MIXER_ProgramStart);
+	AddVMEventFunction(VM_EVENT_DOS_INIT_KERNEL_READY,AddVMEventFunctionFuncPair(MIXER_DOS_Boot));
 
     MIXER_Controls_Init();
 }
