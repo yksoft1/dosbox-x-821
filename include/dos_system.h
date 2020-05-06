@@ -247,6 +247,7 @@ public:
 	virtual bool TestDir(const char * _dir)=0;
 	virtual bool FindFirst(const char * _dir,DOS_DTA & dta,bool fcb_findfirst=false)=0;
 	virtual bool FindNext(DOS_DTA & dta)=0;
+	virtual bool SetFileAttr(const char * name,Bit16u attr)=0;
 	virtual bool GetFileAttr(const char * name,Bit16u * attr)=0;
 	virtual bool Rename(const char * oldname,const char * newname)=0;
 	virtual bool AllocationInfo(Bit16u * _bytes_sector,Bit8u * _sectors_cluster,Bit16u * _total_clusters,Bit16u * _free_clusters)=0;

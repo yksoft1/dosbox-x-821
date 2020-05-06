@@ -739,6 +739,25 @@ again:
 	return true;
 }
 
+bool localDrive::SetFileAttr(const char * name,Bit16u attr) {
+#if defined (WIN32)
+	char newname[CROSS_LEN];
+	strcpy(newname,basedir);
+	strcat(newname,name);
+	CROSS_FILENAME(newname);
+	dirCache.ExpandName(newname);
+	if (!SetFileAttributes(newname, attr))
+		{
+		DOS_SetError((Bit16u)GetLastError());
+		return false;
+		}
+	dirCache.EmptyCache();
+	return true;
+#else
+	return GetFileAttr(name, &attr);
+#endif
+}
+ 
 bool localDrive::GetFileAttr(const char * name,Bit16u * attr) {
 	char newname[CROSS_LEN];
 	strcpy(newname,basedir);
@@ -753,14 +772,30 @@ bool localDrive::GetFileAttr(const char * name,Bit16u * attr) {
         return false;
     }
 
+#ifdef WIN32
+	Bitu attribs = GetFileAttributesW(host_name); //Does this function exist at all on Win9x? -- yksoft1
+
+	if (attribs == INVALID_FILE_ATTRIBUTES) //failsafe
+		attribs = GetFileAttributes(newname);
+
+ 	if (attribs == INVALID_FILE_ATTRIBUTES)
+ 		{
+ 		DOS_SetError((Bit16u)GetLastError());
+ 		return false;
+ 		}
+ 	*attr = attribs&0x3f;
+ 	return true;
+#else
 	ht_stat_t status;
 	if (ht_stat(host_name,&status)==0) {
 		*attr=DOS_ATTR_ARCHIVE;
 		if(status.st_mode & S_IFDIR) *attr|=DOS_ATTR_DIRECTORY;
+		if(!(status.st_mode & S_IWUSR)) *attr|=DOS_ATTR_READ_ONLY;
 		return true;
 	}
 	*attr=0;
 	return false; 
+#endif
 }
 
 bool localDrive::MakeDir(const char * dir) {
