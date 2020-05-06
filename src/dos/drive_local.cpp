@@ -776,7 +776,10 @@ bool localDrive::GetFileAttr(const char * name,Bit16u * attr) {
 	Bitu attribs = GetFileAttributesW(host_name); //Does this function exist at all on Win9x? -- yksoft1
 
 	if (attribs == INVALID_FILE_ATTRIBUTES) //failsafe
-		attribs = GetFileAttributes(newname);
+	{
+		if (GetLastError() == ERROR_CALL_NOT_IMPLEMENTED) //tested this on Win95
+			attribs = GetFileAttributes(newname);
+	}
 
  	if (attribs == INVALID_FILE_ATTRIBUTES)
  		{
