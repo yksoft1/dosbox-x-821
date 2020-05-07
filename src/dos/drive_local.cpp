@@ -746,11 +746,34 @@ bool localDrive::SetFileAttr(const char * name,Bit16u attr) {
 	strcat(newname,name);
 	CROSS_FILENAME(newname);
 	dirCache.ExpandName(newname);
-	if (!SetFileAttributes(newname, attr))
+
+    // guest to host code page translation
+    host_cnv_char_t *host_name = CodePageGuestToHost(newname);
+    if (host_name == NULL) {
+        LOG_MSG("%s: Filename '%s' from guest is non-representable on the host filesystem through code page conversion",__FUNCTION__,newname);
+        return false;
+    }
+
+	Bitu ret = SetFileAttributesW(host_name, attr);
+	if (!ret)
+	{
+		Bitu gle = GetLastError();
+		if (gle == ERROR_CALL_NOT_IMPLEMENTED) //tested this on Win95
 		{
-		DOS_SetError((Bit16u)GetLastError());
-		return false;
+			ret = SetFileAttributes(newname, attr);
+			if(!ret)
+			{
+				gle = GetLastError();
+				DOS_SetError((Bit16u)gle);
+				return false;				
+			}
 		}
+		else
+		{
+			DOS_SetError((Bit16u)gle);
+			return false;
+		}
+	}
 	dirCache.EmptyCache();
 	return true;
 #else
