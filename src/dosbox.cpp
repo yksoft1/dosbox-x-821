@@ -2321,6 +2321,13 @@ void DOSBOX_SetupConfigSections(void) {
 	Pbool->Set_help("Allow TSR and application (anything other than the DOS kernel) to request control of the HMA.\n"
 			"They will not be able to request control however if the DOS kernel is configured to occupy the HMA (DOS=HIGH)");
 
+	Pstring = secprop->Add_string("drive z is remote",Property::Changeable::WhenIdle,"auto");
+	Pstring->Set_values(truefalseautoopt);
+	Pstring->Set_help("If set, DOS will report drive Z as remote. If not set, DOS will report drive Z as local.\n"
+					"If auto (default), DOS will report drive Z as remote or local depending on the program.\n"
+					"Set this option to true to prevent SCANDISK.EXE from attempting scan and repair drive Z:\n"
+					"which is impossible since Z: is a virtual drive not backed by a disk filesystem.");
+
 	Pint = secprop->Add_int("hma minimum allocation",Property::Changeable::WhenIdle,0);
 	Pint->Set_help("Minimum allocation size for HMA in bytes (equivalent to /HMAMIN= parameter).");
 
