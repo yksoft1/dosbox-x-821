@@ -18,11 +18,14 @@
 
 
 #include <string.h>
+#include <stdlib.h>
 #include "dosbox.h"
 #include "callback.h"
 #include "mem.h"
 #include "regs.h"
+#include "bios_disk.h"
 #include "dos_inc.h"
+#include "drives.h"
 
 bool DOS_IOCTL(void) {
 	Bitu handle=0;Bit8u drive=0;
@@ -168,17 +171,57 @@ bool DOS_IOCTL(void) {
 			PhysPt ptr	= SegPhys(ds)+reg_dx;
 			switch (reg_cl) {
 			case 0x60:		/* Get Device parameters */
-				mem_writeb(ptr  ,0x03);					// special function
-				mem_writeb(ptr+1,(drive>=2)?0x05:0x14);	// fixed disc(5), 1.44 floppy(14)
-				mem_writew(ptr+2,drive>=2);				// nonremovable ?
+			{
+				//mem_writeb(ptr+0,0);					// special functions (call value)
+				mem_writeb(ptr+1,(drive>=2)?0x05:0x07);	// type: hard disk(5), 1.44 floppy(7)
+				mem_writew(ptr+2,(drive>=2)?0x01:0x00);	// attributes: bit 0 set for nonremovable
 				mem_writew(ptr+4,0x0000);				// num of cylinders
 				mem_writeb(ptr+6,0x00);					// media type (00=other type)
-				// drive parameter block following
-				mem_writeb(ptr+7,drive);				// drive
-				mem_writeb(ptr+8,0x00);					// unit number
-				mem_writed(ptr+0x1f,0xffffffff);		// next parameter block
+				// bios parameter block following
+				bool usereal=false;
+				bootstrap bootbuffer;
+				if (!strncmp(Drives[drive]->GetInfo(),"fatDrive ",9)) {
+					fatDrive *fdp = dynamic_cast<fatDrive*>(Drives[drive]);
+					if (fdp != NULL) {
+						bootbuffer=fdp->GetBootBuffer();
+						if (bootbuffer.bytespersector&&bootbuffer.mediadescriptor)
+							usereal=true;
+					}
+				}
+				if (usereal) {
+					mem_writew(ptr+7,bootbuffer.bytespersector);				// bytes per sector (Win3 File Mgr. uses it)
+					mem_writew(ptr+9,bootbuffer.sectorspercluster);				// sectors per cluster
+					mem_writew(ptr+0xa,bootbuffer.reservedsectors);				// number of reserved sectors
+					mem_writew(ptr+0xc,bootbuffer.fatcopies);					// number of FATs
+					mem_writew(ptr+0xd,bootbuffer.rootdirentries);				// number of root entries
+					mem_writew(ptr+0xf,bootbuffer.totalsectorcount);			// number of small sectors
+					mem_writew(ptr+0x11,bootbuffer.mediadescriptor);			// media type
+					mem_writew(ptr+0x12,(uint16_t)bootbuffer.sectorsperfat);	// sectors per FAT
+					mem_writew(ptr+0x14,(uint16_t)bootbuffer.sectorspertrack);	// sectors per track
+					mem_writew(ptr+0x16,(uint16_t)bootbuffer.headcount);		// number of heads
+					mem_writed(ptr+0x18,(uint32_t)bootbuffer.hiddensectorcount);// number of hidden sectors
+					mem_writed(ptr+0x1c,(uint32_t)bootbuffer.totalsecdword); 	// number of big sectors
+				} else {
+					mem_writew(ptr+7,0x0200);									// bytes per sector (Win3 File Mgr. uses it)
+					mem_writew(ptr+9,(drive>=2)?0x20:0x01);						// sectors per cluster
+					mem_writew(ptr+0xa,0x0001);									// number of reserved sectors
+					mem_writew(ptr+0xc,0x02);									// number of FATs
+					mem_writew(ptr+0xd,(drive>=2)?0x0200:0x00E0);				// number of root entries
+					mem_writew(ptr+0xf,(drive>=2)?0x0000:0x0B40);				// number of small sectors
+					mem_writew(ptr+0x11,(drive>=2)?0xF8:0xF0);					// media type
+					mem_writew(ptr+0x12,(drive>=2)?0x00C9:0x0009);				// sectors per FAT
+					mem_writew(ptr+0x14,(drive>=2)?0x003F:0x0012);				// sectors per track
+					mem_writew(ptr+0x16,(drive>=2)?0x10:0x02);					// number of heads
+					mem_writed(ptr+0x18,0); 									// number of hidden sectors
+					mem_writed(ptr+0x1c,(drive>=2)?0x31F11:0x00); 				// number of big sectors
+				}
+				for (int i=0x20; i<0x22; i++)
+					mem_writeb(ptr+i,0);
 				break;
-			case 0x46:
+			}
+			case 0x40:	/* Set Device parameters */
+			case 0x46:	/* Set volume serial number */
+				break;
 			case 0x66:	/* Volume label */
 				{			
 					char const* bufin=Drives[drive]->GetLabel();
@@ -202,6 +245,105 @@ bool DOS_IOCTL(void) {
 					mem_writed(ptr+2,0x1234);		//Serial number
 					MEM_BlockWrite(ptr+6,buffer,11);//volumename
 					if(reg_cl == 0x66) MEM_BlockWrite(ptr+0x11, buf2,8);//filesystem
+				}
+				break;
+			case 0x41:  /* Write logical device track */
+				{
+					fatDrive *fdp = dynamic_cast<fatDrive*>(Drives[drive]);
+					if (fdp == NULL) {
+						DOS_SetError(DOSERR_ACCESS_DENIED);
+						return false;
+					}
+
+					Bit8u sectbuf[SECTOR_SIZE_MAX];
+
+					if (fdp->loadedDisk == NULL) {
+						DOS_SetError(DOSERR_ACCESS_DENIED);
+						return false;
+					}
+
+					/* (RBIL) [http://www.ctyme.com/intr/rb-2896.htm]
+					 * Offset  Size    Description     (Table 01562)
+					 * 00h    BYTE    special functions (reserved, must be zero)
+					 * 01h    WORD    number of disk head
+					 * 03h    WORD    number of disk cylinder
+					 * 05h    WORD    number of first sector to read/write
+					 * 07h    WORD    number of sectors
+					 * 09h    DWORD   transfer address */
+					Bit16u head = mem_readw(ptr+1);
+					Bit16u cyl = mem_readw(ptr+3);
+					Bit16u sect = mem_readw(ptr+5)+1; // MS-DOS 6.22: Sector numbers start at zero here?
+					Bit16u nsect = mem_readw(ptr+7);
+					Bit32u xfer_addr = mem_readd(ptr+9);
+					PhysPt xfer_ptr = ((xfer_addr>>16u)<<4u)+(xfer_addr&0xFFFFu);
+					Bit16u sectsize = fdp->loadedDisk->getSectSize();
+
+					LOG(LOG_IOCTL,LOG_DEBUG)("DOS:IOCTL Call 0D:41 Write Logical Device Track from Drive %2X C/H/S=%u/%u/%u num=%u from %04x:%04x sz=%u",
+							reg_cl,cyl,head,sect,nsect,xfer_addr >> 16,xfer_addr & 0xFFFF,sectsize);
+
+					while (nsect > 0) {
+						MEM_BlockRead(xfer_ptr,sectbuf,sectsize);
+
+						Bit8u status = fdp->loadedDisk->Write_Sector(head,cyl,sect,sectbuf);
+						if (status != 0) {
+							LOG(LOG_IOCTL,LOG_DEBUG)("IOCTL 0D:61 write error at C/H/S %u/%u/%u",cyl,head,sect);
+							DOS_SetError(DOSERR_ACCESS_DENIED);//FIXME
+							return false;
+						}
+
+						xfer_ptr += sectsize;
+						nsect--;
+						sect++;
+					}
+				}
+				break;
+			case 0x61:  /* Read logical device track */
+				{
+					fatDrive *fdp = dynamic_cast<fatDrive*>(Drives[drive]);
+					if (fdp == NULL) {
+						DOS_SetError(DOSERR_ACCESS_DENIED);
+						return false;
+					}
+
+					Bit8u sectbuf[SECTOR_SIZE_MAX];
+
+					if (fdp->loadedDisk == NULL) {
+						DOS_SetError(DOSERR_ACCESS_DENIED);
+						return false;
+					}
+
+					/* (RBIL) [http://www.ctyme.com/intr/rb-2896.htm]
+					 * Offset  Size    Description     (Table 01562)
+					 * 00h    BYTE    special functions (reserved, must be zero)
+					 * 01h    WORD    number of disk head
+					 * 03h    WORD    number of disk cylinder
+					 * 05h    WORD    number of first sector to read/write
+					 * 07h    WORD    number of sectors
+					 * 09h    DWORD   transfer address */
+					Bit16u head = mem_readw(ptr+1);
+					Bit16u cyl = mem_readw(ptr+3);
+					Bit16u sect = mem_readw(ptr+5)+1; // MS-DOS 6.22: Sector numbers start at zero here?
+					Bit16u nsect = mem_readw(ptr+7);
+					Bit32u xfer_addr = mem_readd(ptr+9);
+					PhysPt xfer_ptr = ((xfer_addr>>16u)<<4u)+(xfer_addr&0xFFFFu);
+					Bit16u sectsize = fdp->loadedDisk->getSectSize();
+
+					LOG(LOG_IOCTL,LOG_DEBUG)("DOS:IOCTL Call 0D:61 Read Logical Device Track from Drive %2X C/H/S=%u/%u/%u num=%u to %04x:%04x sz=%u",
+							reg_cl,cyl,head,sect,nsect,xfer_addr >> 16,xfer_addr & 0xFFFF,sectsize);
+
+					while (nsect > 0) {
+						Bit8u status = fdp->loadedDisk->Read_Sector(head,cyl,sect,sectbuf);
+						if (status != 0) {
+							LOG(LOG_IOCTL,LOG_DEBUG)("IOCTL 0D:61 read error at C/H/S %u/%u/%u",cyl,head,sect);
+							DOS_SetError(DOSERR_ACCESS_DENIED);//FIXME
+							return false;
+						}
+
+						MEM_BlockWrite(xfer_ptr,sectbuf,sectsize);
+						xfer_ptr += sectsize;
+						nsect--;
+						sect++;
+					}
 				}
 				break;
 			default	:	

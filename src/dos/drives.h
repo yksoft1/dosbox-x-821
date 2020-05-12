@@ -234,6 +234,7 @@ public:
 	Bit32u getFirstFreeClust(void);
 	bool directoryBrowse(Bit32u dirClustNumber, direntry *useEntry, Bit32s entNum, Bit32s start=0);
 	bool directoryChange(Bit32u dirClustNumber, direntry *useEntry, Bit32s entNum);
+	bootstrap GetBootBuffer(void);
 	imageDisk *loadedDisk;
 	bool created_successfully;
 private:
