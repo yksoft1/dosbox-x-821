@@ -296,6 +296,7 @@ public:
 	virtual char const * GetLabel(){return labelCache.GetLabel();};
 	virtual void SetLabel(const char *label, bool iscdrom, bool updatable);
 	virtual void UpdateBootVolumeLabel(const char *label);
+	virtual Bit32u GetPartitionOffset(void);
 };
 
 PhysPt DOS_Get_DPB(unsigned int dos_drive);

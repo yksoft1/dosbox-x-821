@@ -2018,3 +2018,6 @@ bool fatDrive::TestDir(const char *dir) {
 	return getDirClustNum(dir, &dummyClust, false);
 }
 
+Bit32u fatDrive::GetPartitionOffset(void) {
+	return partSectOff;
+}

@@ -164,7 +164,11 @@ bool DOS_IOCTL(void) {
 		return true;
 	case 0x0D:		/* Generic block device request */
 		{
-			if ((drive < 2) || Drives[drive]->isRemovable()) {
+			if (drive < 2 && !Drives[drive]) {
+				DOS_SetError(DOSERR_ACCESS_DENIED);
+				return false;
+			}
+			if (reg_ch != 0x08 || Drives[drive]->isRemovable()) {
 				DOS_SetError(DOSERR_FUNCTION_NUMBER_INVALID);
 				return false;
 			}
@@ -175,13 +179,14 @@ bool DOS_IOCTL(void) {
 				//mem_writeb(ptr+0,0);					// special functions (call value)
 				mem_writeb(ptr+1,(drive>=2)?0x05:0x07);	// type: hard disk(5), 1.44 floppy(7)
 				mem_writew(ptr+2,(drive>=2)?0x01:0x00);	// attributes: bit 0 set for nonremovable
-				mem_writew(ptr+4,0x0000);				// num of cylinders
+				mem_writew(ptr+4,(drive>=2)?0x3FF:0x50);// num of cylinders
 				mem_writeb(ptr+6,0x00);					// media type (00=other type)
 				// bios parameter block following
-				bool usereal=false;
+				fatDrive *fdp;
 				bootstrap bootbuffer;
+				bool usereal=false;
 				if (!strncmp(Drives[drive]->GetInfo(),"fatDrive ",9)) {
-					fatDrive *fdp = dynamic_cast<fatDrive*>(Drives[drive]);
+					fdp = dynamic_cast<fatDrive*>(Drives[drive]);
 					if (fdp != NULL) {
 						bootbuffer=fdp->GetBootBuffer();
 						if (bootbuffer.bytespersector&&bootbuffer.mediadescriptor)
@@ -189,6 +194,8 @@ bool DOS_IOCTL(void) {
 					}
 				}
 				if (usereal) {
+					if (fdp->loadedDisk != NULL)
+						mem_writew(ptr+4,fdp->loadedDisk->cylinders);			// num of cylinders
 					mem_writew(ptr+7,bootbuffer.bytespersector);				// bytes per sector (Win3 File Mgr. uses it)
 					mem_writew(ptr+9,bootbuffer.sectorspercluster);				// sectors per cluster
 					mem_writew(ptr+0xa,bootbuffer.reservedsectors);				// number of reserved sectors
@@ -219,6 +226,96 @@ bool DOS_IOCTL(void) {
 					mem_writeb(ptr+i,0);
 				break;
 			}
+			case 0x42:  /* Format and verify logical device track (FORMAT.COM) */
+				{
+					/* 01h    WORD    number of disk head
+					 * 03h    WORD    number of disk cylinder
+					 * ---BYTE 00h bit 1 set---
+					 * 05h    WORD    number of tracks to format */
+					Bit8u flags = mem_readb(ptr+0);
+					Bit16u head = mem_readw(ptr+1);
+					Bit16u cyl = mem_readw(ptr+3);
+					Bit16u ntracks = (flags & 0x1) ? mem_readw(ptr+5) : 1;
+					Bit16u sect = 0;
+
+					fatDrive *fdp = dynamic_cast<fatDrive*>(Drives[drive]);
+					if (fdp == NULL) {
+						DOS_SetError(DOSERR_ACCESS_DENIED);
+						return false;
+					}
+
+					/* BUT: These are C/H/S values relative to the partition!
+					 * FIXME: MS-DOS may not adjust sector value, or maybe it does...
+					 * perhaps there is a reason Linux fdisk warns about sector alignment to sect/track for MS-DOS partitions? */
+					{
+						Bit32u adj = fdp->GetPartitionOffset();
+						sect += adj % fdp->loadedDisk->sectors;
+						adj /= fdp->loadedDisk->sectors;
+						head += adj % fdp->loadedDisk->heads;
+						adj /= fdp->loadedDisk->heads;
+						cyl += adj;
+
+						while (sect >= fdp->loadedDisk->sectors) {
+							sect -= fdp->loadedDisk->sectors;
+							head++;
+						}
+						while (head >= fdp->loadedDisk->heads) {
+							head -= fdp->loadedDisk->heads;
+							cyl++;
+						}
+
+						/* finally, MS-DOS counts sectors from 0 and BIOS INT 13h counts from 1 */
+						sect++;
+					}
+
+					// STUB!
+					LOG(LOG_IOCTL,LOG_DEBUG)("DOS:IOCTL Call 0D:42 Drive %2X pretending to format device track C/H/S=%u/%u/%u ntracks=%u",drive,cyl,head,sect,ntracks);
+				}
+				break;
+			case 0x62:	/* Verify logical device track (FORMAT.COM) */
+				{
+					/* 01h    WORD    number of disk head
+					 * 03h    WORD    number of disk cylinder
+					 * 05h    WORD    number of tracks to verify */
+					Bit16u head = mem_readw(ptr+1);
+					Bit16u cyl = mem_readw(ptr+3);
+					Bit16u ntracks = mem_readw(ptr+5);
+					Bit16u sect = 0;
+
+					fatDrive *fdp = dynamic_cast<fatDrive*>(Drives[drive]);
+					if (fdp == NULL) {
+						DOS_SetError(DOSERR_ACCESS_DENIED);
+						return false;
+					}
+
+					/* BUT: These are C/H/S values relative to the partition!
+					 * FIXME: MS-DOS may not adjust sector value, or maybe it does...
+					 * perhaps there is a reason Linux fdisk warns about sector alignment to sect/track for MS-DOS partitions? */
+					{
+						Bit32u adj = fdp->GetPartitionOffset();
+						sect += adj % fdp->loadedDisk->sectors;
+						adj /= fdp->loadedDisk->sectors;
+						head += adj % fdp->loadedDisk->heads;
+						adj /= fdp->loadedDisk->heads;
+						cyl += adj;
+
+						while (sect >= fdp->loadedDisk->sectors) {
+							sect -= fdp->loadedDisk->sectors;
+							head++;
+						}
+						while (head >= fdp->loadedDisk->heads) {
+							head -= fdp->loadedDisk->heads;
+							cyl++;
+						}
+
+						/* finally, MS-DOS counts sectors from 0 and BIOS INT 13h counts from 1 */
+						sect++;
+					}
+
+					// STUB!
+					LOG(LOG_IOCTL,LOG_DEBUG)("DOS:IOCTL Call 0D:62 Drive %2X pretending to verify device track C/H/S=%u/%u/%u ntracks=%u",drive,cyl,head,sect,ntracks);
+				}
+				break;
 			case 0x40:	/* Set Device parameters */
 			case 0x46:	/* Set volume serial number */
 				break;
@@ -244,7 +341,7 @@ bool DOS_IOCTL(void) {
 					mem_writew(ptr+0,0);			// 0
 					mem_writed(ptr+2,0x1234);		//Serial number
 					MEM_BlockWrite(ptr+6,buffer,11);//volumename
-					if(reg_cl == 0x66) MEM_BlockWrite(ptr+0x11, buf2,8);//filesystem
+					MEM_BlockWrite(ptr+0x11,buf2,8);//filesystem
 				}
 				break;
 			case 0x41:  /* Write logical device track */
@@ -272,14 +369,38 @@ bool DOS_IOCTL(void) {
 					 * 09h    DWORD   transfer address */
 					Bit16u head = mem_readw(ptr+1);
 					Bit16u cyl = mem_readw(ptr+3);
-					Bit16u sect = mem_readw(ptr+5)+1; // MS-DOS 6.22: Sector numbers start at zero here?
+					Bit16u sect = mem_readw(ptr+5);
 					Bit16u nsect = mem_readw(ptr+7);
 					Bit32u xfer_addr = mem_readd(ptr+9);
 					PhysPt xfer_ptr = ((xfer_addr>>16u)<<4u)+(xfer_addr&0xFFFFu);
 					Bit16u sectsize = fdp->loadedDisk->getSectSize();
 
+					/* BUT: These are C/H/S values relative to the partition!
+					 * FIXME: MS-DOS may not adjust sector value, or maybe it does...
+					 * perhaps there is a reason Linux fdisk warns about sector alignment to sect/track for MS-DOS partitions? */
+					{
+						Bit32u adj = fdp->GetPartitionOffset();
+						sect += adj % fdp->loadedDisk->sectors;
+						adj /= fdp->loadedDisk->sectors;
+						head += adj % fdp->loadedDisk->heads;
+						adj /= fdp->loadedDisk->heads;
+						cyl += adj;
+
+						while (sect >= fdp->loadedDisk->sectors) {
+							sect -= fdp->loadedDisk->sectors;
+							head++;
+						}
+						while (head >= fdp->loadedDisk->heads) {
+							head -= fdp->loadedDisk->heads;
+							cyl++;
+						}
+
+						/* finally, MS-DOS counts sectors from 0 and BIOS INT 13h counts from 1 */
+						sect++;
+					}
+
 					LOG(LOG_IOCTL,LOG_DEBUG)("DOS:IOCTL Call 0D:41 Write Logical Device Track from Drive %2X C/H/S=%u/%u/%u num=%u from %04x:%04x sz=%u",
-							reg_cl,cyl,head,sect,nsect,xfer_addr >> 16,xfer_addr & 0xFFFF,sectsize);
+							drive,cyl,head,sect,nsect,xfer_addr >> 16,xfer_addr & 0xFFFF,sectsize);
 
 					while (nsect > 0) {
 						MEM_BlockRead(xfer_ptr,sectbuf,sectsize);
@@ -322,14 +443,38 @@ bool DOS_IOCTL(void) {
 					 * 09h    DWORD   transfer address */
 					Bit16u head = mem_readw(ptr+1);
 					Bit16u cyl = mem_readw(ptr+3);
-					Bit16u sect = mem_readw(ptr+5)+1; // MS-DOS 6.22: Sector numbers start at zero here?
+					Bit16u sect = mem_readw(ptr+5);
 					Bit16u nsect = mem_readw(ptr+7);
 					Bit32u xfer_addr = mem_readd(ptr+9);
 					PhysPt xfer_ptr = ((xfer_addr>>16u)<<4u)+(xfer_addr&0xFFFFu);
 					Bit16u sectsize = fdp->loadedDisk->getSectSize();
 
+					/* BUT: These are C/H/S values relative to the partition!
+					 * FIXME: MS-DOS may not adjust sector value, or maybe it does...
+					 * perhaps there is a reason Linux fdisk warns about sector alignment to sect/track for MS-DOS partitions? */
+					{
+						Bit32u adj = fdp->GetPartitionOffset();;
+						sect += adj % fdp->loadedDisk->sectors;
+						adj /= fdp->loadedDisk->sectors;
+						head += adj % fdp->loadedDisk->heads;
+						adj /= fdp->loadedDisk->heads;
+						cyl += adj;
+
+						while (sect >= fdp->loadedDisk->sectors) {
+							sect -= fdp->loadedDisk->sectors;
+							head++;
+						}
+						while (head >= fdp->loadedDisk->heads) {
+							head -= fdp->loadedDisk->heads;
+							cyl++;
+						}
+
+						/* finally, MS-DOS counts sectors from 0 and BIOS INT 13h counts from 1 */
+						sect++;
+					}
+
 					LOG(LOG_IOCTL,LOG_DEBUG)("DOS:IOCTL Call 0D:61 Read Logical Device Track from Drive %2X C/H/S=%u/%u/%u num=%u to %04x:%04x sz=%u",
-							reg_cl,cyl,head,sect,nsect,xfer_addr >> 16,xfer_addr & 0xFFFF,sectsize);
+							drive,cyl,head,sect,nsect,xfer_addr >> 16,xfer_addr & 0xFFFF,sectsize);
 
 					while (nsect > 0) {
 						Bit8u status = fdp->loadedDisk->Read_Sector(head,cyl,sect,sectbuf);
@@ -345,6 +490,12 @@ bool DOS_IOCTL(void) {
 						sect++;
 					}
 				}
+				break;
+			case 0x4A:
+			case 0x4B:
+			case 0x6A:
+			case 0x6B:
+				LOG(LOG_IOCTL,LOG_ERROR)("DOS:IOCTL Call 0D:%2X Drive %2X volume/drive locking IOCTL, faking it",reg_cl,drive);
 				break;
 			default	:	
 				LOG(LOG_IOCTL,LOG_ERROR)("DOS:IOCTL Call 0D:%2X Drive %2X unhandled",reg_cl,drive);
