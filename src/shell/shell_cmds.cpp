@@ -1358,8 +1358,16 @@ void DOS_Shell::CMD_MORE(char * args) {
 		this->ParseLine(defaultcon);
 		return;
 	}
-	int nchars = 0, nlines = 0, linecount = 0, LINES = (Bit16u)mem_readb(BIOS_ROWS_ON_SCREEN_MINUS_1)-3, COLS = mem_readw(BIOS_SCREEN_COLUMNS), TABSIZE = 8;
+	int nchars = 0, nlines = 0, linecount = 0, LINES = 25, COLS = 80, TABSIZE = 8;
 	StripSpaces(args);
+	if (IS_PC98_ARCH) {
+ 		LINES=real_readb(0x60,0x113) & 0x01 ? 25 : 20;
+ 		COLS=80;
+ 	} else {
+ 		LINES=real_readb(BIOSMEM_SEG,BIOSMEM_NB_ROWS)+1;
+ 		COLS=real_readw(BIOSMEM_SEG,BIOSMEM_NB_COLS);
+ 	}
+ 	LINES--;
 	if (strcasecmp(args,"nul")==0) return;
 	if (!*args) {
 		WriteOut(MSG_Get("SHELL_SYNTAXERROR"));
