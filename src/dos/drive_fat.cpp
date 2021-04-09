@@ -948,7 +948,7 @@ Bit8u fatDrive::Read_AbsoluteSector(Bit32u sectnum, void * data) {
         unsigned int c = sector_size / lsz;
 
         if (c != 0 && (sector_size % lsz) == 0) {
-            Bit32u ssect = sectnum * c;
+            Bit32u ssect = (sectnum * c) + physToLogAdj;
 
             while (c-- != 0) {
                 if (loadedDisk->Read_AbsoluteSector(ssect++,data) != 0)
@@ -971,7 +971,7 @@ Bit8u fatDrive::Write_AbsoluteSector(Bit32u sectnum, void * data) {
         unsigned int c = sector_size / lsz;
 
         if (c != 0 && (sector_size % lsz) == 0) {
-            Bit32u ssect = sectnum * c;
+            Bit32u ssect = (sectnum * c) + physToLogAdj;
 
             while (c-- != 0) {
                 if (loadedDisk->Write_AbsoluteSector(ssect++,data) != 0)
@@ -1028,6 +1028,8 @@ void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u c
 	Bit32u startSector;
 	bool pc98_512_to_1024_allow = false;	
 	struct partTable mbrData;
+
+	physToLogAdj = 0;
 
 	if(!loadedDisk) {
 		created_successfully = false;
@@ -1230,20 +1232,19 @@ void fatDrive::fatDriveInit(const char *sysFilename, Bit32u bytesector, Bit32u c
          LOG_MSG("Disk indicates %u bytes/sector, FAT filesystem indicates %u bytes/sector. Ratio=%u:1 shift=%u",
                  getSectSize(),bootbuffer.bytespersector,ratio,ratioshift);
 
-         if ((unsigned int)(bootbuffer.bytespersector >> ratioshift) == getSectSize()) {
-             assert(ratio >= 2);
+		if ((unsigned int)(bootbuffer.bytespersector >> ratioshift) == fatDrive::getSectSize()) {
+ 			assert(ratio >= 2);
 
-             /* we can hack things in place IF the starting sector is an even number */
-             if ((partSectOff & (ratio - 1)) == 0) {
-                 partSectOff >>= ratioshift;
-                 startSector >>= ratioshift;
-                 sector_size = bootbuffer.bytespersector;
-                 LOG_MSG("Using logical sector size %u",sector_size);
-             }
-             else {
-                 LOG_MSG("However there's nothing I can do, because the partition starts on an odd sector");
-             }
-        }
+ 			/* the best case conversion is one where the starting sector is a multiple
+ 			 * of the ratio, but there are enough PC-98 HDI images (Dragon Knight 4 reported by
+ 			 * shiningforceforever) that don't fit that model, so we have to make do with a
+ 			 * physical sector adjust too. */
+ 			physToLogAdj = partSectOff & (ratio - 1);
+ 			partSectOff >>= ratioshift;
+ 			startSector >>= ratioshift;
+ 			sector_size = bootbuffer.bytespersector;
+ 			LOG_MSG("Using logical sector size %u, offset by %u physical sectors",sector_size,physToLogAdj);
+ 		}
     }
 
     /* NTS: PC-98 floppies (the 1024 byte/sector format) do not have magic bytes */

@@ -267,7 +267,8 @@ private:
 	Bit32u partSectOff;
 	Bit32u firstDataSector;
 	Bit32u firstRootDirSect;
-
+	Bit32u physToLogAdj; // Some PC-98 HDI images have larger logical than physical bytes/sector and the partition is not a multiple of it, so this is needed
+	
 	Bit32u cwdDirCluster;
 	Bit32u dirPosition; /* Position in directory search */
 
